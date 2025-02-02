@@ -19,16 +19,19 @@ import csv
 import logging
 from pprint import pformat
 
+# This script processes stock trading data and generates Swedish tax reports.
 
 stocks_data = {}
 k4_data = {}
 k4_transactions = []
 k4_combined_transactions = {}
 
-k4_currency_data = { 'USD': {'antal': 0,
+k4_currency_data = { 'USD.SEK': {'antal': 0,
+                             'forsaljningspris': 0,
                              'omkostnadsbelopp': 0},
-                     'EUR': {'antal': 0,
-                             'omkostnadsbelopp': 0} }
+                     'EUR.SEK': {'antal': 0,
+                            'forsaljningspris': 0,
+                            'omkostnadsbelopp': 0} }
 
 currency_rates = {}
 
@@ -151,7 +154,7 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
         currency: Currency of the transaction
         date: Date of the transaction
     """
-
+    logging.debug("==> Processing k4 entry: %s, %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, avg_price, currency, date)
     if currency == BASE_CURRENCY:
         if symbol not in k4_data:
             k4_data[symbol] = {
@@ -174,8 +177,9 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             'omkostnadsbelopp': -quantity * avg_price,
             'vinst': k4_data[symbol]['vinst']
         })
+        logging.debug("==> K4 Tax event - Profit/Loss: %s", k4_data[symbol]['vinst'])
     else:
-        currency_rate = 1 / currency_rates[(date, currency)] # USD.SEK rate
+        currency_rate = currency_rates[(date, currency)] # USD.SEK rate
         if symbol not in k4_data:
             k4_data[symbol] = {
                 'beteckning': symbol,
@@ -197,6 +201,50 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             'omkostnadsbelopp': (-quantity * avg_price),
             'vinst': k4_data[symbol]['vinst']
         })
+        logging.debug("==> K4 Tax event - Profit/Loss: %s", k4_data[symbol]['vinst'])
+
+def process_currency_sell(currency, amount, currency_rate):
+    """Process a currency sell transaction.
+
+    Args:
+        symbol: Currency symbol (e.g., 'USD')
+        amount: Amount of currency sold
+        currency_rate: Exchange rate to SEK
+    """
+    logging.debug("k4_currency_data: %s", k4_currency_data)
+    logging.debug("stocks_data: %s", stocks_data)
+    if currency not in k4_currency_data:
+        if k4_currency_data[currency]['antal'] + amount < 0:
+            k4_currency_data[currency]['antal'] = 0
+        else:
+            k4_currency_data[currency]['antal'] += amount
+        k4_currency_data[currency]['forsaljningspris'] += -amount * currency_rate
+        k4_currency_data[currency]['omkostnadsbelopp'] += -amount * stocks_data[currency]['avgprice']
+    else:
+        k4_currency_data[currency]['antal'] += amount
+        k4_currency_data[currency]['forsaljningspris'] += -amount * currency_rate
+        k4_currency_data[currency]['omkostnadsbelopp'] += -amount * stocks_data[currency]['avgprice']
+
+def process_currency_buy(currency, amount, currency_rate):
+    """Process a currency buy transaction.
+
+    Args:
+        currency: Currency symbol (e.g., 'USD')
+        amount: Amount of currency bought
+        currency_rate: Exchange rate to SEK
+    """
+    logging.debug("==> Processing currency buy/selling stock: %s, %s, %s", currency, amount, currency_rate)
+    if currency not in stocks_data:
+        stocks_data[currency] = {
+            'quantity': amount,
+            'totalprice': amount * currency_rate,
+            'avgprice': currency_rate
+        }
+    else:
+        #k4_currency_data[currency]['antal'] += -amount
+        stocks_data[currency]['quantity'] += -amount
+        stocks_data[currency]['totalprice'] += -amount * currency_rate
+        stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
 
 def process_buy_entry(symbol, quantity, trade_price, commission, currency, date):
     """Process a buy transaction.
@@ -209,6 +257,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
         currency: Currency of the transaction
         date: Date of the transaction
     """
+    logging.debug("Processing buy entry: %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, currency, date)
     if currency == BASE_CURRENCY:
 
         if symbol not in stocks_data:
@@ -224,8 +273,18 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             stocks_data[symbol]['avgprice'] = stocks_data[symbol]['totalprice'] / stocks_data[symbol]['quantity']
     else:
         # TODO: Buying stock in foreign currency is a sell transaction of the trading currency
+        currency_rate = currency_rates[(date, currency)] # USD.SEK rate
+        #process_currency_sell(currency + ".SEK", quantity * trade_price + commission, currency_rate)
+        process_k4_entry(
+            symbol=currency + ".SEK",
+            quantity=-quantity,
+            trade_price=trade_price,
+            commission=commission,
+            avg_price=stocks_data[currency + ".SEK"]['avgprice'],
+            currency='SEK',
+            date=date
+        )
 
-        currency_rate = 1 / currency_rates[(date, currency)] # USD.SEK rate
         if symbol not in stocks_data:
             stocks_data[symbol] = {
                 'quantity': quantity,
@@ -239,7 +298,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             stocks_data[symbol]['avgprice'] = stocks_data[symbol]['totalprice'] / stocks_data[symbol]['quantity']
 
     logging.debug("Buy entry processed for %s [currency: %s]", symbol, currency)
-    logging.debug("Updated stock data: %s", stocks_data[symbol])
+    logging.debug("Updated stock data for %s: %s", symbol, stocks_data[symbol])
 
 def process_sell_entry(symbol, quantity, trade_price, commission, currency, date):
     """Process a sell transaction.
@@ -252,6 +311,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         currency: Currency of the transaction
         date: Date of the transaction
     """
+    logging.debug("Processing sell entry: %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, currency, date)
     if symbol not in stocks_data:
         logging.error(f"Error: No BUY entry found for SELL entry {symbol}")
         sys.exit(1)
@@ -261,8 +321,9 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] #+ commission
     else:
         # TODO: Selling stock in a foreign currency is a buy transaction of the trading currency
+        currency_rate = currency_rates[(date, currency)] # USD.SEK rate
+        process_currency_buy(currency + ".SEK", quantity * trade_price - commission, currency_rate)
 
-        currency_rate = 1 / currency_rates[(date, currency)] # USD.SEK rate
         stocks_data[symbol]['quantity'] += quantity
         stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] #+ (commission * currency_rate)
 
@@ -285,7 +346,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
             logging.info("Sell entry processed for %s with fractional shares, totalprice not zero: %s", symbol, stocks_data[symbol]['totalprice'])
 
     logging.debug("Sell entry processed for %s", symbol)
-    logging.debug("Updated stock data: %s", stocks_data[symbol])
+    logging.debug("Updated stock data for %s: %s", symbol, stocks_data[symbol])
 
 def process_trading_data(data):
     for entry in data:
@@ -363,7 +424,7 @@ def process_currency_rates(rates):
         if rate['FromCurrency'] == 'SEK':
             date = rate['Date/Time'].split(';')[0]
             key = (date, rate['ToCurrency'])
-            currency_rates[key] = float(rate['Rate'])
+            currency_rates[key] = 1 /float(rate['Rate'])
 
 
 def process_data(filename):

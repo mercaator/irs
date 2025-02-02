@@ -218,9 +218,9 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             stocks_data[symbol] = {
                 'quantity': quantity,
                 'totalprice': quantity * trade_price + commission,
-                'avgprice': trade_price,
                 'currency': currency
             }
+            stocks_data[symbol]['avgprice'] = stocks_data[symbol]['totalprice'] / stocks_data[symbol]['quantity']
         else:
             stocks_data[symbol]['quantity'] += quantity
             stocks_data[symbol]['totalprice'] += quantity * trade_price + commission
@@ -232,9 +232,9 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             stocks_data[symbol] = {
                 'quantity': quantity,
                 'totalprice': (quantity * trade_price + commission) * currency_rate,
-                'avgprice': trade_price * currency_rate,
                 'currency': currency
             }
+            stocks_data[symbol]['avgprice'] = stocks_data[symbol]['totalprice'] / stocks_data[symbol]['quantity']
         else:
             stocks_data[symbol]['quantity'] += quantity
             stocks_data[symbol]['totalprice'] += (quantity * trade_price + commission) * currency_rate
@@ -260,11 +260,11 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
     if currency == BASE_CURRENCY:
         stocks_data[symbol]['quantity'] += quantity
-        stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] + commission
+        stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] #+ commission
     else:
         currency_rate = 1 / currency_rates[(date, currency)] # USD.SEK rate
         stocks_data[symbol]['quantity'] += quantity
-        stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] + (commission * currency_rate)
+        stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] #+ (commission * currency_rate)
 
     process_k4_entry(
         symbol=symbol,
@@ -279,6 +279,10 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
     if stocks_data[symbol]['quantity'] < 0.0001:  # handle float error with fractional shares
         stocks_data[symbol]['quantity'] = 0
         stocks_data[symbol]['avgprice'] = 0
+        if stocks_data[symbol]['totalprice'] < 0.0001:
+            stocks_data[symbol]['totalprice'] = 0
+        else:
+            logging.info("Sell entry processed for %s with fractional shares, totalprice not zero: %s", symbol, stocks_data[symbol]['totalprice'])
 
     logging.debug("Sell entry processed for %s", symbol)
     logging.debug("Updated stock data: %s", stocks_data[symbol])

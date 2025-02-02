@@ -23,6 +23,7 @@ from pprint import pformat
 stocks_data = {}
 k4_data = {}
 k4_transactions = []
+k4_combined_transactions = {}
 
 k4_currency_data = { 'USD': {'antal': 0,
                              'omkostnadsbelopp': 0},
@@ -208,10 +209,6 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
         currency: Currency of the transaction
         date: Date of the transaction
     """
-
-    # TODO
-    # If currency is not equal to base currency the buy transaction is also a sell transaction of the trading currency
-
     if currency == BASE_CURRENCY:
 
         if symbol not in stocks_data:
@@ -226,7 +223,8 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             stocks_data[symbol]['totalprice'] += quantity * trade_price + commission
             stocks_data[symbol]['avgprice'] = stocks_data[symbol]['totalprice'] / stocks_data[symbol]['quantity']
     else:
-        # Fectch time of transaction as param and get currency rate from currency_rates
+        # TODO: Buying stock in foreign currency is a sell transaction of the trading currency
+
         currency_rate = 1 / currency_rates[(date, currency)] # USD.SEK rate
         if symbol not in stocks_data:
             stocks_data[symbol] = {
@@ -262,6 +260,8 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         stocks_data[symbol]['quantity'] += quantity
         stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] #+ commission
     else:
+        # TODO: Selling stock in a foreign currency is a buy transaction of the trading currency
+
         currency_rate = 1 / currency_rates[(date, currency)] # USD.SEK rate
         stocks_data[symbol]['quantity'] += quantity
         stocks_data[symbol]['totalprice'] += quantity * stocks_data[symbol]['avgprice'] #+ (commission * currency_rate)
@@ -301,9 +301,22 @@ def process_trading_data(data):
         elif entry['Buy/Sell'] == 'SELL':
             process_sell_entry(symbol, quantity, trade_price, commission, currency, date)
 
+
+    # Combine transactions with same symbol
+    for transaction in k4_transactions:
+        if transaction['beteckning'] not in k4_combined_transactions:
+            k4_combined_transactions[transaction['beteckning']] = transaction
+        else:
+            k4_combined_transactions[transaction['beteckning']]['antal'] += transaction['antal']
+            k4_combined_transactions[transaction['beteckning']]['forsaljningspris'] += transaction['forsaljningspris']
+            k4_combined_transactions[transaction['beteckning']]['omkostnadsbelopp'] += transaction['omkostnadsbelopp']
+            k4_combined_transactions[transaction['beteckning']]['vinst'] = k4_combined_transactions[transaction['beteckning']]['forsaljningspris'] - k4_combined_transactions[transaction['beteckning']]['omkostnadsbelopp']
+
     logging.debug("Final K4 data:\n%s", pformat(k4_data, indent=4))
     logging.debug("Final K4 transactions:\n%s", pformat(k4_transactions, indent=4))
+    logging.debug("Final K4 combined transactions:\n%s", pformat(k4_combined_transactions, indent=4))
     logging.debug("Final stocks data:\n%s", pformat(stocks_data, indent=4))
+    logging.debug("Final currency data:\n%s", pformat(k4_currency_data, indent=4))
 
 def read_csv_file(filename):
     """Read CSV file and separate stock trades, forex trades, and currency rates.

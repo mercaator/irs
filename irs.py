@@ -154,7 +154,7 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
         currency: Currency of the transaction
         date: Date of the transaction
     """
-    logging.debug("==> Processing k4 entry: %s, %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, avg_price, currency, date)
+    logging.info("==> Processing k4 entry: %s, %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, avg_price, currency, date)
     if currency == BASE_CURRENCY:
         if symbol not in k4_data:
             k4_data[symbol] = {
@@ -177,7 +177,7 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             'omkostnadsbelopp': -quantity * avg_price,
             'vinst': k4_data[symbol]['vinst']
         })
-        logging.debug("==> K4 Tax event - Profit/Loss: %s", k4_data[symbol]['vinst'])
+        logging.info("==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) - (-quantity * avg_price))
     else:
         currency_rate = currency_rates[(date, currency)] # USD.SEK rate
         if symbol not in k4_data:
@@ -201,7 +201,7 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             'omkostnadsbelopp': (-quantity * avg_price),
             'vinst': k4_data[symbol]['vinst']
         })
-        logging.debug("==> K4 Tax event - Profit/Loss: %s", k4_data[symbol]['vinst'])
+        logging.info("==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) * currency_rate - (-quantity * avg_price))
 
 def process_currency_sell(currency, amount, currency_rate):
     """Process a currency sell transaction.
@@ -277,9 +277,9 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
         #process_currency_sell(currency + ".SEK", quantity * trade_price + commission, currency_rate)
         process_k4_entry(
             symbol=currency + ".SEK",
-            quantity=-quantity,
-            trade_price=trade_price,
-            commission=commission,
+            quantity=-quantity*trade_price+commission,
+            trade_price=currency_rate,
+            commission=0,
             avg_price=stocks_data[currency + ".SEK"]['avgprice'],
             currency='SEK',
             date=date
@@ -378,6 +378,9 @@ def process_trading_data(data):
     logging.debug("Final K4 combined transactions:\n%s", pformat(k4_combined_transactions, indent=4))
     logging.debug("Final stocks data:\n%s", pformat(stocks_data, indent=4))
     logging.debug("Final currency data:\n%s", pformat(k4_currency_data, indent=4))
+    # Summarize the total profit/loss
+    total_profit_loss = sum(transaction['vinst'] for transaction in k4_combined_transactions.values())
+    logging.info("==> Total profit/loss: %s", total_profit_loss)
 
 def read_csv_file(filename):
     """Read CSV file and separate stock trades, forex trades, and currency rates.
@@ -444,7 +447,7 @@ def process_data(filename):
         return (date, is_forex)
 
     process_currency_rates(currency_rates_csv)
-    logging.debug("Currency rates: %s", currency_rates)
+    logging.debug("Currency rates:\n%s", pformat(currency_rates, indent=4))
 
     # Combine and sort trades
     combined_trades = sorted(stock_trades + forex_trades, key=sort_key)

@@ -18,6 +18,7 @@ import sys
 import csv
 import logging
 from pprint import pformat
+from sru_generator import generate_info_sru, generate_blanketter_sru
 
 # This script processes stock trading data and generates Swedish tax reports.
 
@@ -84,63 +85,23 @@ def create_cli_parser():
     return parser
 
 
+def read_config(config_file):
+    """Read configuration from JSON file."""
+    with open(config_file) as f:
+        return json.load(f)
+
 def handle_oldinfosru(args):
-    file_content = (f"#DATABESKRIVNING_START\n"
-                    f"#PRODUKT SRU\n"
-                    f"#FILNAMN BLANKETTER.SRU\n"
-                    f"#DATABESKRIVNING_SLUT\n"
-                    f"#MEDIELEV_START\n"
-                    f"#ORGNR {args['orgnr']}\n"
-                    f"#NAMN {args['namn']}\n"
-                    f"#ADRESS {args['adress']}\n"
-                    f"#POSTNR {args['postnr']}\n"
-                    f"#POSTORT {args['postort']}\n"
-                    f"#EMAIL {args['email']}\n"
-                    f"#MEDIELEV_SLUT\n")
-
-    with open("INFO.SRU", "w") as file:
-        file.write(file_content)
-
-    logging.info("INFO.SRU file generated successfully.")
-
-
-def read_config(config_file='config.json'):
-    try:
-        with open(config_file, 'r') as file:
-            config = json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logging.error(f"Error reading config file: {e}")
-        sys.exit(1)
-    return config
-
-def generate_info_sru(config):
-    file_content = (f"#DATABESKRIVNING_START\n"
-                   f"#PRODUKT SRU\n"
-                   f"#FILNAMN BLANKETTER.SRU\n"
-                   f"#DATABESKRIVNING_SLUT\n"
-                   f"#MEDIELEV_START\n"
-                   f"#ORGNR {config.get('orgnr', '')}\n"
-                   f"#NAMN {config.get('namn', '')}\n"
-                   f"#ADRESS {config.get('adress', '')}\n"
-                   f"#POSTNR {config.get('postnr', '')}\n"
-                   f"#POSTORT {config.get('postort', '')}\n"
-                   f"#EMAIL {config.get('email', '')}\n"
-                   f"#MEDIELEV_SLUT\n")
-
-    with open("INFO.SRU", "w") as file:
-        file.write(file_content)
-
-    logging.info("INFO.SRU file generated successfully.")
+    generate_info_sru(args)
 
 def handle_infosru(args):
-    config_file = args.get('config', 'config.json')
-    config = read_config(config_file)
+    config = read_config(args.get('config', 'config.json'))
     generate_info_sru(config)
 
 def handle_k4(args):
     filepath = args.get('indata_ibkr', 'indata_ibkr.csv')
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
-    process_data(filepath)
+    k4_combined_transactions = process_data(filepath)
+    generate_blanketter_sru(k4_data, k4_combined_transactions)
 
 def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date):
     """Process a sell transaction for K4 tax reporting.
@@ -452,8 +413,7 @@ def process_data(filename):
     # Combine and sort trades
     combined_trades = sorted(stock_trades + forex_trades, key=sort_key)
     process_trading_data(combined_trades)
-    # TODO: Add forex and currency rate processing if needed
-
+    return k4_combined_transactions
 
 if __name__ == '__main__':
     main()

@@ -391,6 +391,22 @@ def process_currency_rates(rates):
             key = (date, rate['ToCurrency'])
             currency_rates[key] = 1 /float(rate['Rate'])
 
+def post_process_trading_data(combined_trades):
+    """Post-process the trading data for K4 tax reporting as the system handles only integer values.
+
+    Args:
+        combined_trades: List of combined trading data
+    """
+    output = {}
+    for symbol, trade in combined_trades.items():
+        post_processed_data = {}
+        post_processed_data['antal'] = int(trade['antal'])
+        post_processed_data['forsaljningspris'] = int(trade['forsaljningspris'])
+        post_processed_data['omkostnadsbelopp'] = int(trade['omkostnadsbelopp'])
+        post_processed_data['vinst'] = int(trade['vinst'])
+        output[symbol] = post_processed_data
+    return output
+
 
 def process_data(filename):
     """Process the input file and generate tax reports.
@@ -414,7 +430,7 @@ def process_data(filename):
     # Combine and sort trades
     combined_trades = sorted(stock_trades + forex_trades, key=sort_key)
     process_trading_data(combined_trades)
-    return k4_combined_transactions
+    return post_process_trading_data(k4_combined_transactions)
 
 if __name__ == '__main__':
     main()

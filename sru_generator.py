@@ -184,23 +184,23 @@ def generate_sru_header(config):
                    )
     return file_header
 
-def generate_row(number, symbol, data):
+def generate_row(number, codes, symbol, data):
     """Generate a row of data for the SRU file.
 
     Args:
         symbol: Symbol of the stock
         data: Dictionary containing data for the stock
     """
-    row = (f"#UPPGIFT {K4_FIELD_CODES_A[number]['antal']} {data['antal']}\n"
-                  f"#UPPGIFT {K4_FIELD_CODES_A[number]['beteckning']} {symbol}\n"
-                  f"#UPPGIFT {K4_FIELD_CODES_A[number]['forsaljningspris']} {data['forsaljningspris']}\n"
-                  f"#UPPGIFT {K4_FIELD_CODES_A[number]['omkostnadsbelopp']} {data['omkostnadsbelopp']}\n")
+    row = (f"#UPPGIFT {codes[number]['antal']} {data['antal']}\n"
+                  f"#UPPGIFT {codes[number]['beteckning']} {symbol}\n"
+                  f"#UPPGIFT {codes[number]['forsaljningspris']} {data['forsaljningspris']}\n"
+                  f"#UPPGIFT {codes[number]['omkostnadsbelopp']} {data['omkostnadsbelopp']}\n")
     if data['vinst'] < 0:
-        row += (f"#UPPGIFT {K4_FIELD_CODES_A[number]['vinst']} 0\n"
-                      f"#UPPGIFT {K4_FIELD_CODES_A[number]['forlust']} {abs(data['vinst'])}\n")
+        row += (f"#UPPGIFT {codes[number]['vinst']} 0\n"
+                      f"#UPPGIFT {codes[number]['forlust']} {abs(data['vinst'])}\n")
     else:
-        row += (f"#UPPGIFT {K4_FIELD_CODES_A[number]['vinst']} {data['vinst']}\n"
-                     f"#UPPGIFT {K4_FIELD_CODES_A[number]['forlust']} 0\n")
+        row += (f"#UPPGIFT {codes[number]['vinst']} {data['vinst']}\n"
+                     f"#UPPGIFT {codes[number]['forlust']} 0\n")
     return row
 
 def generate_footer(blankett):
@@ -208,12 +208,132 @@ def generate_footer(blankett):
               f"#BLANKETTSLUT\n")
     return footer
 
-def generate_summary(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust):
+def generate_summary_a(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust):
+    summary = (f"#UPPGIFT {K4_FIELD_CODES_A['summa_forsaljningspris']} {summa_forsaljningspris}\n"
+               f"#UPPGIFT {K4_FIELD_CODES_A['summa_omkostnadsbelopp']} {summa_omkostnadsbelopp}\n"
+               f"#UPPGIFT {K4_FIELD_CODES_A['summa_vinst']} {summa_vinst}\n"
+               f"#UPPGIFT {K4_FIELD_CODES_A['summa_forlust']} {summa_forlust}\n")
+    return summary
+
+def generate_summary_c(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust):
     summary = (f"#UPPGIFT {K4_FIELD_CODES_C['summa_forsaljningspris']} {summa_forsaljningspris}\n"
                f"#UPPGIFT {K4_FIELD_CODES_C['summa_omkostnadsbelopp']} {summa_omkostnadsbelopp}\n"
                f"#UPPGIFT {K4_FIELD_CODES_C['summa_vinst']} {summa_vinst}\n"
                f"#UPPGIFT {K4_FIELD_CODES_C['summa_forlust']} {summa_forlust}\n")
     return summary
+
+def generate_k4_blocks(k4_combined_transactions):
+    """Process K4 transactions into SRU file format.
+
+    Args:
+        k4_combined_transactions: Dictionary of combined K4 transactions
+    """
+    k4_a_rows = ""
+    k4_c_rows = ""
+    k4_a_counter = 0
+    k4_c_counter = 0
+
+    blocks_a = []
+    blocks_c = []
+
+    MAX_SHARE_ROWS = 9
+    MAX_VALUTA_ROWS = 7
+
+    summa_forsaljningspris_a = 0
+    summa_omkostnadsbelopp_a = 0
+    summa_vinst_a = 0
+    summa_forlust_a = 0
+
+    summa_forsaljningspris_c = 0
+    summa_omkostnadsbelopp_c = 0
+    summa_vinst_c = 0
+    summa_forlust_c = 0
+
+    for symbol, data in k4_combined_transactions.items():
+        if '.' not in symbol: # Aktier
+            k4_a_counter += 1
+            logging.debug(f"Aktie: {symbol} row {k4_a_counter}")
+            k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, data)
+            summa_forsaljningspris_a += data['forsaljningspris']
+            summa_omkostnadsbelopp_a += data['omkostnadsbelopp']
+            if data['vinst'] < 0:
+                summa_forlust_a += abs(data['vinst'])
+            else:
+                summa_vinst_a += data['vinst']
+
+            if k4_a_counter == MAX_SHARE_ROWS:
+                logging.debug(f"Aktie: A summary")
+                k4_a_rows += generate_summary_a(summa_forsaljningspris_a, summa_omkostnadsbelopp_a, summa_vinst_a, summa_forlust_a)
+                blocks_a.append(k4_a_rows)
+                k4_a_counter = 0
+                summa_forsaljningspris_a = 0
+                summa_omkostnadsbelopp_a = 0
+                summa_vinst_a = 0
+                summa_forlust_a = 0
+                k4_a_rows = ""
+        else: # Valuta
+            k4_c_counter += 1
+            logging.debug(f"Valuta: {symbol} row {k4_c_counter}")
+            k4_c_rows += generate_row(k4_c_counter, K4_FIELD_CODES_C, symbol, data)
+            summa_forsaljningspris_c += data['forsaljningspris']
+            summa_omkostnadsbelopp_c += data['omkostnadsbelopp']
+            if data['vinst'] < 0:
+                summa_forlust_c += abs(data['vinst'])
+            else:
+                summa_vinst_c += data['vinst']
+
+            if k4_c_counter == MAX_VALUTA_ROWS:
+                logging.debug(f"Valuta: C summary")
+                k4_c_rows += generate_summary_c(summa_forsaljningspris_c, summa_omkostnadsbelopp_c, summa_vinst_c, summa_forlust_c)
+                blocks_c.append(k4_c_rows)
+                k4_c_counter = 0
+                summa_forsaljningspris_c = 0
+                summa_omkostnadsbelopp_c = 0
+                summa_vinst_c = 0
+                summa_forlust_c = 0
+                k4_c_rows = ""
+    if k4_a_counter > 0:
+        logging.debug(f"Aktie: A summary")
+        k4_a_rows += generate_summary_a(summa_forsaljningspris_a, summa_omkostnadsbelopp_a, summa_vinst_a, summa_forlust_a)
+        blocks_a.append(k4_a_rows)
+
+
+    if k4_c_counter > 0:
+        logging.debug(f"Valuta: C summary")
+        k4_c_rows += generate_summary_c(summa_forsaljningspris_c, summa_omkostnadsbelopp_c, summa_vinst_c, summa_forlust_c)
+        blocks_c.append(k4_c_rows)
+
+
+    return blocks_a, blocks_c
+
+def assemble_blocks(config, blocks_a, blocks_c):
+    """Assemble blocks into a single SRU file.
+
+    Args:
+        config: Dictionary containing configuration
+        blocks_a: List of blocks for A
+        blocks_c: List of blocks for C
+    """
+    file_content = ""
+    logging.debug(f"Blocks A: {len(blocks_a)}")
+    logging.debug(f"Blocks C: {len(blocks_c)}")
+    logging.debug(f"Blocks C: {blocks_c}")
+    for i, block in enumerate(blocks_a, 1):
+        file_content += generate_sru_header(config)
+        file_content += block
+        if len(blocks_c) > 0:
+            file_content += blocks_c[0]
+            del blocks_c[0]
+        file_content += generate_footer(i)
+
+    # Improbable, but possible
+    if len(blocks_c) > 0:
+        for i, block in enumerate(blocks_c, 1):
+            file_content += generate_sru_header(config)
+            file_content += block
+            file_content += generate_footer(i)
+
+    return file_content
 
 
 def generate_body(config, k4_combined_transactions):
@@ -226,40 +346,8 @@ def generate_body(config, k4_combined_transactions):
         str: Formatted K4 data for SRU file
     """
     file_body = ""
-    MAX_ROWS = 9
-    processed_rows = 0
-    blankett = 0
-
-    summa_forsaljningspris = 0
-    summa_omkostnadsbelopp = 0
-    summa_vinst = 0
-    summa_forlust = 0
-
-    for i, (symbol, data) in enumerate(k4_combined_transactions.items(), 1):
-        if processed_rows == 0:
-            file_body += generate_sru_header(config)
-        file_body += generate_row(processed_rows + 1, symbol, data) # row number starts from 1
-        summa_forsaljningspris += data['forsaljningspris']
-        summa_omkostnadsbelopp += data['omkostnadsbelopp']
-        if data['vinst'] < 0:
-            summa_forlust += abs(data['vinst'])
-        else:
-            summa_vinst += data['vinst']
-        processed_rows += 1
-        if processed_rows == MAX_ROWS:
-            file_body += generate_summary(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust)
-            file_body += generate_footer(blankett)
-            processed_rows = 0
-            blankett += 1
-            summa_forsaljningspris = 0
-            summa_omkostnadsbelopp = 0
-            summa_vinst = 0
-            summa_forlust = 0
-
-    if processed_rows < MAX_ROWS:
-        file_body += generate_summary(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust)
-        file_body += generate_footer(blankett)
-
+    blocks_a, blocks_c = generate_k4_blocks(k4_combined_transactions)
+    file_body += assemble_blocks(config, blocks_a, blocks_c)
     return file_body
 
 def generate_blanketter_sru(config, k4_combined_transactions):
@@ -271,7 +359,6 @@ def generate_blanketter_sru(config, k4_combined_transactions):
     """
     # Initialize file_content first
     file_content = ""
-
     file_body = generate_body(config, k4_combined_transactions)
     file_content += file_body
     file_content += "#FIL_SLUT\n"

@@ -98,10 +98,11 @@ def handle_infosru(args):
     generate_info_sru(config)
 
 def handle_k4(args):
+    config = read_config(args.get('config', 'config.json'))
     filepath = args.get('indata_ibkr', 'indata_ibkr.csv')
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
     k4_combined_transactions = process_data(filepath)
-    generate_blanketter_sru(k4_data, k4_combined_transactions)
+    generate_blanketter_sru(config, k4_combined_transactions)
 
 def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date):
     """Process a sell transaction for K4 tax reporting.

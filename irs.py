@@ -25,15 +25,6 @@ from k4_sru import generate_info_sru, generate_blanketter_sru
 stocks_data = {}
 k4_data = {}
 k4_transactions = []
-k4_combined_transactions = {}
-
-k4_currency_data = { 'USD.SEK': {'antal': 0,
-                             'forsaljningspris': 0,
-                             'omkostnadsbelopp': 0},
-                     'EUR.SEK': {'antal': 0,
-                            'forsaljningspris': 0,
-                            'omkostnadsbelopp': 0} }
-
 currency_rates = {}
 
 # Base currency for all calculations
@@ -160,28 +151,6 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             'omkostnadsbelopp': (-quantity * avg_price)})
         logging.info("==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) * currency_rate - (-quantity * avg_price))
 
-def process_currency_sell(currency, amount, currency_rate):
-    """Process a currency sell transaction.
-
-    Args:
-        symbol: Currency symbol (e.g., 'USD')
-        amount: Amount of currency sold
-        currency_rate: Exchange rate to SEK
-    """
-    logging.debug("k4_currency_data: %s", k4_currency_data)
-    logging.debug("stocks_data: %s", stocks_data)
-    if currency not in k4_currency_data:
-        if k4_currency_data[currency]['antal'] + amount < 0:
-            k4_currency_data[currency]['antal'] = 0
-        else:
-            k4_currency_data[currency]['antal'] += amount
-        k4_currency_data[currency]['forsaljningspris'] += -amount * currency_rate
-        k4_currency_data[currency]['omkostnadsbelopp'] += -amount * stocks_data[currency]['avgprice']
-    else:
-        k4_currency_data[currency]['antal'] += amount
-        k4_currency_data[currency]['forsaljningspris'] += -amount * currency_rate
-        k4_currency_data[currency]['omkostnadsbelopp'] += -amount * stocks_data[currency]['avgprice']
-
 def process_currency_buy(currency, amount, currency_rate):
     """Process a currency buy transaction.
 
@@ -229,9 +198,8 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             stocks_data[symbol]['totalprice'] += quantity * trade_price + commission
             stocks_data[symbol]['avgprice'] = stocks_data[symbol]['totalprice'] / stocks_data[symbol]['quantity']
     else:
-        # TODO: Buying stock in foreign currency is a sell transaction of the trading currency
+        # Buying stock in foreign currency is a sell transaction of the trading currency
         currency_rate = currency_rates[(date, currency)] # USD.SEK rate
-        #process_currency_sell(currency + ".SEK", quantity * trade_price + commission, currency_rate)
         process_k4_entry(
             symbol=currency + ".SEK",
             quantity=-quantity*trade_price+commission,
@@ -320,28 +288,35 @@ def process_input_data(data):
         elif entry['Buy/Sell'] == 'SELL':
             process_sell_entry(symbol, quantity, trade_price, commission, currency, date)
 
+def combine_transactions(transactions):
+    # Combine transactions with same symbol
+    combined_transactions = {}
+    for transaction in transactions:
+        if transaction['beteckning'] not in combined_transactions:
+            combined_transactions[transaction['beteckning']] = transaction
+        else:
+            combined_transactions[transaction['beteckning']]['antal'] += transaction['antal']
+            combined_transactions[transaction['beteckning']]['forsaljningspris'] += transaction['forsaljningspris']
+            combined_transactions[transaction['beteckning']]['omkostnadsbelopp'] += transaction['omkostnadsbelopp']
 
+    # Sort by beteckning
+    combined_transactions = sorted(combined_transactions.values(), key=lambda x: x['beteckning'])
+
+    return combined_transactions
 
 def process_trading_data(data):
-    process_input_data(data)
-
-    # Combine transactions with same symbol
-    for transaction in k4_transactions:
-        if transaction['beteckning'] not in k4_combined_transactions:
-            k4_combined_transactions[transaction['beteckning']] = transaction
-        else:
-            k4_combined_transactions[transaction['beteckning']]['antal'] += transaction['antal']
-            k4_combined_transactions[transaction['beteckning']]['forsaljningspris'] += transaction['forsaljningspris']
-            k4_combined_transactions[transaction['beteckning']]['omkostnadsbelopp'] += transaction['omkostnadsbelopp']
+    process_input_data(data) # Updates global variables
+    combined_transactions = combine_transactions(k4_transactions)
 
     logging.debug("Final K4 data:\n%s", pformat(k4_data, indent=4))
     logging.debug("Final K4 transactions:\n%s", pformat(k4_transactions, indent=4))
-    logging.debug("Final K4 combined transactions:\n%s", pformat(k4_combined_transactions, indent=4))
+    logging.debug("Final K4 combined transactions:\n%s", pformat(combined_transactions, indent=4))
     logging.debug("Final stocks data:\n%s", pformat(stocks_data, indent=4))
-    logging.debug("Final currency data:\n%s", pformat(k4_currency_data, indent=4))
+
     # Summarize the total profit/loss
-    total_profit_loss = sum(transaction['forsaljningspris'] - transaction['omkostnadsbelopp'] for transaction in k4_combined_transactions.values())
+    total_profit_loss = sum(transaction['forsaljningspris'] - transaction['omkostnadsbelopp'] for transaction in combined_transactions)
     logging.info("==> Total profit/loss: %s", total_profit_loss)
+    return combined_transactions
 
 def read_csv_file(filename):
     """Read CSV file and separate stock trades, forex trades, and currency rates.
@@ -390,13 +365,14 @@ def post_process_trading_data(combined_trades):
     Args:
         combined_trades: List of combined trading data
     """
-    output = {}
-    for symbol, trade in combined_trades.items():
+    output = []
+    for trade in combined_trades:
         post_processed_data = {}
-        post_processed_data['antal'] = int(trade['antal'])
-        post_processed_data['forsaljningspris'] = int(trade['forsaljningspris'])
-        post_processed_data['omkostnadsbelopp'] = int(trade['omkostnadsbelopp'])
-        output[symbol] = post_processed_data
+        post_processed_data['antal'] = round(float(trade['antal']))
+        post_processed_data['beteckning'] = trade['beteckning']
+        post_processed_data['forsaljningspris'] = round(float(trade['forsaljningspris']))
+        post_processed_data['omkostnadsbelopp'] = round(float(trade['omkostnadsbelopp']))
+        output.append(post_processed_data)
     return output
 
 
@@ -421,8 +397,8 @@ def process_transactions_ibkr(filename):
 
     # Combine and sort trades
     sorted_trades = sorted(trades, key=sort_key)
-    process_trading_data(sorted_trades)
-    return post_process_trading_data(k4_combined_transactions)
+    processed_data = process_trading_data(sorted_trades)
+    return post_process_trading_data(processed_data)
 
 if __name__ == '__main__':
     main()

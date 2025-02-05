@@ -26,7 +26,7 @@ from datetime import datetime
 # Rad 7 3160 3161 3162 3163 3164 3165
 # Rad 8 3170 3171 3172 3173 3174 3175
 # Rad 9 3180 3181 3182 3183 3184 3185
-# Summa           3301 3302 3303 3304
+# Summa           3300 3301 3304 3305
 K4_FIELD_CODES_A = {
     1: {'antal': '3100',
         'beteckning': '3101',
@@ -84,8 +84,8 @@ K4_FIELD_CODES_A = {
          'forlust': '3185'},
     'summa_forsaljningspris': '3300',
     'summa_omkostnadsbelopp': '3301',
-    'summa_vinst': '3303',
-    'summa_forlust': '3304'
+    'summa_vinst': '3304',
+    'summa_forlust': '3305'
     }
 
 # C. Marknadsnoterade obligationer, valuta m.m.
@@ -97,7 +97,7 @@ K4_FIELD_CODES_A = {
 # Rad 5 3350 3351 3352 3353 3354 3355
 # Rad 6 3360 3361 3362 3363 3364 3365
 # Rad 7 3370 3371 3372 3373 3374 3375
-# Summa           3400 3401 3402 3403
+# Summa           3400 3401 3403 3404
 K4_FIELD_CODES_C = {
     1 : {'antal': '3310',
          'beteckning': '3311',
@@ -184,6 +184,14 @@ def generate_sru_header(config):
                    )
     return file_header
 
+def clean_symbol(symbol):
+    """Clean symbol by removing .SEK if present.
+
+    Args:
+        symbol: Symbol to clean
+    """
+    return symbol[:-4] if symbol.endswith('.SEK') else symbol
+
 def generate_row(number, codes, symbol, data):
     """Generate a row of data for the SRU file.
 
@@ -192,7 +200,7 @@ def generate_row(number, codes, symbol, data):
         data: Dictionary containing data for the stock
     """
     row = (f"#UPPGIFT {codes[number]['antal']} {data['antal']}\n"
-                  f"#UPPGIFT {codes[number]['beteckning']} {symbol}\n"
+                  f"#UPPGIFT {codes[number]['beteckning']} {clean_symbol(symbol)}\n"
                   f"#UPPGIFT {codes[number]['forsaljningspris']} {data['forsaljningspris']}\n"
                   f"#UPPGIFT {codes[number]['omkostnadsbelopp']} {data['omkostnadsbelopp']}\n")
     vinst = data['forsaljningspris'] - data['omkostnadsbelopp']
@@ -243,13 +251,16 @@ def generate_k4_blocks(k4_combined_transactions):
     summa_forsaljningspris_c = 0
     summa_omkostnadsbelopp_c = 0
 
-    for symbol, data in k4_combined_transactions.items():
+    for data in k4_combined_transactions:
+        symbol = data['beteckning']
+        forsaljningspris = data['forsaljningspris']
+        omkostnadsbelopp = data['omkostnadsbelopp']
         if '.' not in symbol: # Aktier
             k4_a_counter += 1
             logging.debug(f"Aktie: {symbol} row {k4_a_counter}")
             k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, data)
-            summa_forsaljningspris_a += data['forsaljningspris']
-            summa_omkostnadsbelopp_a += data['omkostnadsbelopp']
+            summa_forsaljningspris_a += forsaljningspris
+            summa_omkostnadsbelopp_a += omkostnadsbelopp
 
             if k4_a_counter == MAX_SHARE_ROWS:
                 logging.debug(f"Aktie: A summary")
@@ -263,8 +274,8 @@ def generate_k4_blocks(k4_combined_transactions):
             k4_c_counter += 1
             logging.debug(f"Valuta: {symbol} row {k4_c_counter}")
             k4_c_rows += generate_row(k4_c_counter, K4_FIELD_CODES_C, symbol, data)
-            summa_forsaljningspris_c += data['forsaljningspris']
-            summa_omkostnadsbelopp_c += data['omkostnadsbelopp']
+            summa_forsaljningspris_c += forsaljningspris
+            summa_omkostnadsbelopp_c += omkostnadsbelopp
 
             if k4_c_counter == MAX_VALUTA_ROWS:
                 logging.debug(f"Valuta: C summary")

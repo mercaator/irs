@@ -18,7 +18,7 @@ import sys
 import csv
 import logging
 from pprint import pformat
-from sru_generator import generate_info_sru, generate_blanketter_sru
+from k4_sru import generate_info_sru, generate_blanketter_sru
 
 # This script processes stock trading data and generates Swedish tax reports.
 
@@ -130,14 +130,12 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             k4_data[symbol]['forsaljningspris'] += -quantity * trade_price + commission
             k4_data[symbol]['omkostnadsbelopp'] += -quantity * avg_price
 
-        k4_data[symbol]['vinst'] = k4_data[symbol]['forsaljningspris'] - k4_data[symbol]['omkostnadsbelopp']
         # Add to k4 transaction list with the following format: beteckning, antal, forsaljningspris, omkostnadsbelopp, vinst
         k4_transactions.append({
             'beteckning': symbol,
             'antal': -quantity,
             'forsaljningspris': -quantity * trade_price + commission,
             'omkostnadsbelopp': -quantity * avg_price,
-            'vinst': k4_data[symbol]['vinst']
         })
         logging.info("==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) - (-quantity * avg_price))
     else:
@@ -154,15 +152,12 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price + commission) * currency_rate
             k4_data[symbol]['omkostnadsbelopp'] += (-quantity * avg_price)
 
-        k4_data[symbol]['vinst'] = k4_data[symbol]['forsaljningspris'] - k4_data[symbol]['omkostnadsbelopp']
         # Add to k4 transaction list with the following format: beteckning, antal, forsaljningspris, omkostnadsbelopp, vinst
         k4_transactions.append({
             'beteckning': symbol,
             'antal': -quantity,
             'forsaljningspris': (-quantity * trade_price + commission) * currency_rate,
-            'omkostnadsbelopp': (-quantity * avg_price),
-            'vinst': k4_data[symbol]['vinst']
-        })
+            'omkostnadsbelopp': (-quantity * avg_price)})
         logging.info("==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) * currency_rate - (-quantity * avg_price))
 
 def process_currency_sell(currency, amount, currency_rate):
@@ -333,7 +328,6 @@ def process_trading_data(data):
             k4_combined_transactions[transaction['beteckning']]['antal'] += transaction['antal']
             k4_combined_transactions[transaction['beteckning']]['forsaljningspris'] += transaction['forsaljningspris']
             k4_combined_transactions[transaction['beteckning']]['omkostnadsbelopp'] += transaction['omkostnadsbelopp']
-            k4_combined_transactions[transaction['beteckning']]['vinst'] = k4_combined_transactions[transaction['beteckning']]['forsaljningspris'] - k4_combined_transactions[transaction['beteckning']]['omkostnadsbelopp']
 
     logging.debug("Final K4 data:\n%s", pformat(k4_data, indent=4))
     logging.debug("Final K4 transactions:\n%s", pformat(k4_transactions, indent=4))
@@ -341,7 +335,7 @@ def process_trading_data(data):
     logging.debug("Final stocks data:\n%s", pformat(stocks_data, indent=4))
     logging.debug("Final currency data:\n%s", pformat(k4_currency_data, indent=4))
     # Summarize the total profit/loss
-    total_profit_loss = sum(transaction['vinst'] for transaction in k4_combined_transactions.values())
+    total_profit_loss = sum(transaction['forsaljningspris'] - transaction['omkostnadsbelopp'] for transaction in k4_combined_transactions.values())
     logging.info("==> Total profit/loss: %s", total_profit_loss)
 
 def read_csv_file(filename):
@@ -403,7 +397,6 @@ def post_process_trading_data(combined_trades):
         post_processed_data['antal'] = int(trade['antal'])
         post_processed_data['forsaljningspris'] = int(trade['forsaljningspris'])
         post_processed_data['omkostnadsbelopp'] = int(trade['omkostnadsbelopp'])
-        post_processed_data['vinst'] = int(trade['vinst'])
         output[symbol] = post_processed_data
     return output
 

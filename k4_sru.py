@@ -195,12 +195,13 @@ def generate_row(number, codes, symbol, data):
                   f"#UPPGIFT {codes[number]['beteckning']} {symbol}\n"
                   f"#UPPGIFT {codes[number]['forsaljningspris']} {data['forsaljningspris']}\n"
                   f"#UPPGIFT {codes[number]['omkostnadsbelopp']} {data['omkostnadsbelopp']}\n")
-    if data['vinst'] < 0:
+    vinst = data['forsaljningspris'] - data['omkostnadsbelopp']
+    if vinst < 0:
         row += (f"#UPPGIFT {codes[number]['vinst']} 0\n"
-                      f"#UPPGIFT {codes[number]['forlust']} {abs(data['vinst'])}\n")
+                f"#UPPGIFT {codes[number]['forlust']} {abs(vinst)}\n")
     else:
-        row += (f"#UPPGIFT {codes[number]['vinst']} {data['vinst']}\n"
-                     f"#UPPGIFT {codes[number]['forlust']} 0\n")
+        row += (f"#UPPGIFT {codes[number]['vinst']} {vinst}\n"
+                f"#UPPGIFT {codes[number]['forlust']} 0\n")
     return row
 
 def generate_footer(blankett):
@@ -208,18 +209,16 @@ def generate_footer(blankett):
               f"#BLANKETTSLUT\n")
     return footer
 
-def generate_summary_a(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust):
-    summary = (f"#UPPGIFT {K4_FIELD_CODES_A['summa_forsaljningspris']} {summa_forsaljningspris}\n"
-               f"#UPPGIFT {K4_FIELD_CODES_A['summa_omkostnadsbelopp']} {summa_omkostnadsbelopp}\n"
-               f"#UPPGIFT {K4_FIELD_CODES_A['summa_vinst']} {summa_vinst}\n"
-               f"#UPPGIFT {K4_FIELD_CODES_A['summa_forlust']} {summa_forlust}\n")
-    return summary
-
-def generate_summary_c(summa_forsaljningspris, summa_omkostnadsbelopp, summa_vinst, summa_forlust):
-    summary = (f"#UPPGIFT {K4_FIELD_CODES_C['summa_forsaljningspris']} {summa_forsaljningspris}\n"
-               f"#UPPGIFT {K4_FIELD_CODES_C['summa_omkostnadsbelopp']} {summa_omkostnadsbelopp}\n"
-               f"#UPPGIFT {K4_FIELD_CODES_C['summa_vinst']} {summa_vinst}\n"
-               f"#UPPGIFT {K4_FIELD_CODES_C['summa_forlust']} {summa_forlust}\n")
+def generate_summary(codes, summa_forsaljningspris, summa_omkostnadsbelopp):
+    summary = (f"#UPPGIFT {codes['summa_forsaljningspris']} {summa_forsaljningspris}\n"
+               f"#UPPGIFT {codes['summa_omkostnadsbelopp']} {summa_omkostnadsbelopp}\n")
+    vinst = summa_forsaljningspris - summa_omkostnadsbelopp
+    if vinst < 0:
+        summary += (f"#UPPGIFT {codes['summa_vinst']} 0\n"
+                    f"#UPPGIFT {codes['summa_forlust']} {abs(vinst)}\n")
+    else:
+        summary += (f"#UPPGIFT {codes['summa_vinst']} {vinst}\n"
+                    f"#UPPGIFT {codes['summa_forlust']} 0\n")
     return summary
 
 def generate_k4_blocks(k4_combined_transactions):
@@ -241,13 +240,8 @@ def generate_k4_blocks(k4_combined_transactions):
 
     summa_forsaljningspris_a = 0
     summa_omkostnadsbelopp_a = 0
-    summa_vinst_a = 0
-    summa_forlust_a = 0
-
     summa_forsaljningspris_c = 0
     summa_omkostnadsbelopp_c = 0
-    summa_vinst_c = 0
-    summa_forlust_c = 0
 
     for symbol, data in k4_combined_transactions.items():
         if '.' not in symbol: # Aktier
@@ -256,20 +250,14 @@ def generate_k4_blocks(k4_combined_transactions):
             k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, data)
             summa_forsaljningspris_a += data['forsaljningspris']
             summa_omkostnadsbelopp_a += data['omkostnadsbelopp']
-            if data['vinst'] < 0:
-                summa_forlust_a += abs(data['vinst'])
-            else:
-                summa_vinst_a += data['vinst']
 
             if k4_a_counter == MAX_SHARE_ROWS:
                 logging.debug(f"Aktie: A summary")
-                k4_a_rows += generate_summary_a(summa_forsaljningspris_a, summa_omkostnadsbelopp_a, summa_vinst_a, summa_forlust_a)
+                k4_a_rows += generate_summary(K4_FIELD_CODES_A, summa_forsaljningspris_a, summa_omkostnadsbelopp_a)
                 blocks_a.append(k4_a_rows)
                 k4_a_counter = 0
                 summa_forsaljningspris_a = 0
                 summa_omkostnadsbelopp_a = 0
-                summa_vinst_a = 0
-                summa_forlust_a = 0
                 k4_a_rows = ""
         else: # Valuta
             k4_c_counter += 1
@@ -277,32 +265,25 @@ def generate_k4_blocks(k4_combined_transactions):
             k4_c_rows += generate_row(k4_c_counter, K4_FIELD_CODES_C, symbol, data)
             summa_forsaljningspris_c += data['forsaljningspris']
             summa_omkostnadsbelopp_c += data['omkostnadsbelopp']
-            if data['vinst'] < 0:
-                summa_forlust_c += abs(data['vinst'])
-            else:
-                summa_vinst_c += data['vinst']
 
             if k4_c_counter == MAX_VALUTA_ROWS:
                 logging.debug(f"Valuta: C summary")
-                k4_c_rows += generate_summary_c(summa_forsaljningspris_c, summa_omkostnadsbelopp_c, summa_vinst_c, summa_forlust_c)
+                k4_c_rows += generate_summary(K4_FIELD_CODES_C, summa_forsaljningspris_c, summa_omkostnadsbelopp_c)
                 blocks_c.append(k4_c_rows)
                 k4_c_counter = 0
                 summa_forsaljningspris_c = 0
                 summa_omkostnadsbelopp_c = 0
-                summa_vinst_c = 0
-                summa_forlust_c = 0
                 k4_c_rows = ""
     if k4_a_counter > 0:
         logging.debug(f"Aktie: A summary")
-        k4_a_rows += generate_summary_a(summa_forsaljningspris_a, summa_omkostnadsbelopp_a, summa_vinst_a, summa_forlust_a)
+        k4_a_rows += generate_summary(K4_FIELD_CODES_A, summa_forsaljningspris_a, summa_omkostnadsbelopp_a)
         blocks_a.append(k4_a_rows)
 
 
     if k4_c_counter > 0:
         logging.debug(f"Valuta: C summary")
-        k4_c_rows += generate_summary_c(summa_forsaljningspris_c, summa_omkostnadsbelopp_c, summa_vinst_c, summa_forlust_c)
+        k4_c_rows += generate_summary(K4_FIELD_CODES_C, summa_forsaljningspris_c, summa_omkostnadsbelopp_c)
         blocks_c.append(k4_c_rows)
-
 
     return blocks_a, blocks_c
 

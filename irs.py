@@ -101,7 +101,7 @@ def handle_k4(args):
     config = read_config(args.get('config', 'config.json'))
     filepath = args.get('indata_ibkr', 'indata_ibkr.csv')
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
-    k4_combined_transactions = process_data(filepath)
+    k4_combined_transactions = process_transactions_ibkr(filepath)
     generate_blanketter_sru(config, k4_combined_transactions)
 
 def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date):
@@ -305,7 +305,8 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
     logging.debug("Sell entry processed for %s", symbol)
     logging.debug("Updated stock data for %s: %s", symbol, stocks_data[symbol])
 
-def process_trading_data(data):
+
+def process_input_data(data):
     for entry in data:
         date = entry['DateTime'].split(';')[0]
         symbol = entry['Symbol']
@@ -319,6 +320,10 @@ def process_trading_data(data):
         elif entry['Buy/Sell'] == 'SELL':
             process_sell_entry(symbol, quantity, trade_price, commission, currency, date)
 
+
+
+def process_trading_data(data):
+    process_input_data(data)
 
     # Combine transactions with same symbol
     for transaction in k4_transactions:
@@ -358,19 +363,13 @@ def read_csv_file(filename):
         split_index = next(i for i, line in enumerate(lines) if len(line.strip().split(',')) < len(lines[0].strip().split(',')))
 
         # Process trades
-        trades_reader = csv.DictReader(lines[:split_index])
-        for row in trades_reader:
-            if '.' in row['Symbol']:
-                forex_trades.append(row)
-            else:
-                stock_trades.append(row)
+        trades_reader = list(csv.DictReader(lines[:split_index]))
 
         # Process currency rates
-        rates_reader = csv.DictReader(lines[split_index:])
-        currency_rates = list(rates_reader)
+        rates_reader = list(csv.DictReader(lines[split_index:]))
 
-    logging.debug(f"Processed {len(stock_trades)} stock trades, {len(forex_trades)} forex trades, and {len(currency_rates)} currency rates")
-    return stock_trades, forex_trades, currency_rates
+    logging.debug(f"Processed {len(trades_reader)} stock trades, {len(rates_reader)} currency rates")
+    return trades_reader, rates_reader
 
 def process_currency_rates(rates):
     """Process currency exchange rates from the CSV file.
@@ -401,13 +400,13 @@ def post_process_trading_data(combined_trades):
     return output
 
 
-def process_data(filename):
+def process_transactions_ibkr(filename):
     """Process the input file and generate tax reports.
 
     Args:
         filename: Path to the input CSV file
     """
-    stock_trades, forex_trades, currency_rates_csv = read_csv_file(filename)
+    trades, currency_rates_csv = read_csv_file(filename)
 
     # Create a sorting key function that puts forex trades before stock trades on the same date
     def sort_key(trade):
@@ -421,8 +420,8 @@ def process_data(filename):
     logging.debug("Currency rates:\n%s", pformat(currency_rates, indent=4))
 
     # Combine and sort trades
-    combined_trades = sorted(stock_trades + forex_trades, key=sort_key)
-    process_trading_data(combined_trades)
+    sorted_trades = sorted(trades, key=sort_key)
+    process_trading_data(sorted_trades)
     return post_process_trading_data(k4_combined_transactions)
 
 if __name__ == '__main__':

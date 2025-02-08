@@ -18,7 +18,7 @@ import sys
 import logging
 from pprint import pformat
 from sru import generate_info_sru, generate_blanketter_sru
-from data import process_transactions_ibkr
+from data import process_transactions
 
 # This script processes stock trading data and generates Swedish tax reports (K4 SRU).
 
@@ -63,6 +63,8 @@ def create_cli_parser():
     parser.add_argument('--config', default='config.json', help='Path to configuration file')
     parser.add_argument('--indata_ibkr', default='indata_ibkr.csv',
                        help='Path to the input CSV file for k4 command')
+    parser.add_argument('--indata_bitstamp', default='indata_bitstamp.csv',
+                       help='Path to the input CSV file for k4 command')
     parser.add_argument('--debug', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        default='INFO', help='Set the debug level')
     parser.add_argument('--year', default=2024, help='Year to process')
@@ -84,10 +86,11 @@ def handle_infosru(args):
 
 def handle_k4(args):
     config = read_config(args.get('config', 'config.json'))
-    filepath = args.get('indata_ibkr', 'indata_ibkr.csv')
+    filepath_ibkr = args.get('indata_ibkr', 'indata_ibkr.csv')
+    filepath_bitstamp = args.get('indata_bitstamp', 'indata_bitstamp.csv')
     year = args.get('year', 2024)
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
-    transactions = process_transactions_ibkr(filepath, year)
+    transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year)
     generate_blanketter_sru(config, transactions)
 
 if __name__ == '__main__':

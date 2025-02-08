@@ -336,8 +336,8 @@ def process_trading_data(data):
     output = sorted(k4_data.values(), key=lambda x: x['beteckning'])
     return output
 
-def read_csv_file(filename):
-    """Read CSV file and separate stock trades, forex trades, and currency rates.
+def read_csv_ibkr(filename):
+    """Read CSV file with Interactive Brokers transactions.
 
     Args:
         filename: Path to the CSV file
@@ -363,6 +363,65 @@ def read_csv_file(filename):
 
     logging.debug(f"Processed {len(trades_reader)} stock trades, {len(rates_reader)} currency rates")
     return trades_reader, rates_reader
+
+
+def convert_buy_sell(trade_type):
+    """Convert trade type to BUY/SELL.
+
+    Args:
+        trade_type: Trade type (buy/sell)
+    """
+    if trade_type == 'Buy':
+        return 'BUY'
+    elif trade_type == 'Sell':
+        return 'SELL'
+    else:
+        return trade_type
+
+def convert_datetime(datetime):
+    """Convert datetime to the format used in the output file.
+
+    Args:
+        datetime: Datetime string
+    """
+    # Input format: 2013-04-22T20:06:43Z
+    # Output format: "20241125;095441"
+    date, time = datetime.split('T')
+    date = date.replace('-', '')
+    time = time.replace('Z', '').replace(':', '')
+    return f"{date};{time}"
+
+
+def read_csv_bitstamp(filename):
+    """Read CSV file with Bitstamp transactions.
+
+    Args:
+        filename: Path to the CSV file
+
+    Returns:
+        tuple: (stock_trades, forex_trades, currency_rates) where each is a list of dictionaries
+    """
+    with open(filename, 'r') as csvfile:
+        lines = csvfile.readlines()
+        trades_reader = list(csv.DictReader(lines))
+        # Convert bitstamp CVS into IBRK format
+        # From: ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID
+        # To: "DateTime","Symbol","Buy/Sell","Quantity","TradePrice","IBCommission","CurrencyPrimary"
+        bitstamp_trades = []
+        for trade in trades_reader:
+            bitstamp_trade = {}
+            bitstamp_trade['DateTime'] = convert_datetime(trade['Datetime'])
+            bitstamp_trade['Symbol'] = trade['Amount currency']
+            bitstamp_trade['Buy/Sell'] = convert_buy_sell(trade['Type'])
+            bitstamp_trade['Quantity'] = trade['Amount']
+            bitstamp_trade['TradePrice'] = trade['Value']
+            bitstamp_trade['IBCommission'] = trade['Fee']
+            bitstamp_trade['CurrencyPrimary'] = trade['Value currency']
+            bitstamp_trades.append(bitstamp_trade)
+        # logging.debug(f"Processed {len(trades_reader)} Bitstamp trades")
+        # logging.debug("==> Bitstamp trades:\n%s", pformat(bitstamp_trades, indent=4))
+
+    return trades_reader
 
 def process_currency_rates(rates):
     """Process currency exchange rates from the CSV file.
@@ -433,13 +492,15 @@ def save_stocks_data(year):
         json.dump(filtered_stocks_data, file, indent=4)
     logging.info(f"Saved portfolio data for {year}")
 
-def process_transactions_ibkr(filename, year):
+def process_transactions(filename_ibkr, filename_bitstamp, year):
     """Process the input file and generate tax reports.
 
     Args:
         filename: Path to the input CSV file
     """
-    trades, currency_rates_csv = read_csv_file(filename)
+    trades, currency_rates_csv = read_csv_ibkr(filename_ibkr)
+    # TODO: Implement Bitstamp CSV processing
+    # trades_bitstamp = read_csv_bitstamp(filename_bitstamp)
 
     init_stocks_data(year)
 

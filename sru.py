@@ -147,6 +147,7 @@ K4_FIELD_CODES_C = {
     'summa_forlust': '3404'
 }
 
+CURRENCY_CODES = ['USD', 'EUR', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'CAD', 'AUD', 'NZD', 'JPY', 'CNY', 'HKD', 'MXN', 'BRL', 'ARS', 'CLP', 'COP', 'PEN', 'UYU', 'PYG']
 
 def generate_info_sru(data):
     """Generate INFO.SRU file from provided data.
@@ -255,7 +256,7 @@ def generate_k4_blocks(k4_combined_transactions):
         symbol = data['beteckning']
         forsaljningspris = data['forsaljningspris']
         omkostnadsbelopp = data['omkostnadsbelopp']
-        if '.' not in symbol: # Aktier
+        if symbol not in CURRENCY_CODES: # Aktier
             k4_a_counter += 1
             logging.debug(f"Aktie: {symbol} row {k4_a_counter}")
             k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, data)

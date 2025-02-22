@@ -17,7 +17,7 @@ import sys
 import csv
 import json
 from pprint import pformat
-from sru import CURRENCY_CODES
+from .sru import CURRENCY_CODES, OUTPUT_DIR
 
 stocks_data = {}
 k4_data = {}
@@ -488,7 +488,7 @@ def save_stocks_data(year):
     """
     # Filter out stocks with quantity 0
     filtered_stocks_data = {symbol: data for symbol, data in stocks_data.items() if data['quantity'] != 0}
-    with open(f'output_portfolio_{year}.json', 'w') as file:
+    with open(f'{OUTPUT_DIR}output_portfolio_{year}.json', 'w') as file:
         json.dump(filtered_stocks_data, file, indent=4)
     logging.info(f"Saved portfolio data for {year}")
 

@@ -14,6 +14,9 @@
 
 import logging
 from datetime import datetime
+import os
+
+OUTPUT_DIR = "output/"
 
 # A. Marknadsnoterade aktier, aktieindexobligationer, aktieoptioner m.m.
 #       Ant. Bet. F.   Om.  V.   F.
@@ -168,7 +171,11 @@ def generate_info_sru(data):
                    f"#EMAIL {data.get('email', '')}\n"
                    f"#MEDIELEV_SLUT\n")
 
-    with open("INFO.SRU", "w") as file:
+    # Create output directory if it doesn't exist
+    if not os.path.exists(OUTPUT_DIR):
+        os.makedirs(OUTPUT_DIR)
+
+    with open(OUTPUT_DIR + "/INFO.SRU", "w") as file:
         file.write(file_content)
 
     logging.info("INFO.SRU file generated successfully.")
@@ -356,7 +363,7 @@ def generate_blanketter_sru(config, k4_combined_transactions):
     file_content += file_body
     file_content += "#FIL_SLUT\n"
 
-    with open("BLANKETTER.SRU", "w") as file:
+    with open(OUTPUT_DIR + "BLANKETTER.SRU", "w") as file:
         file.write(file_content)
 
     logging.info("BLANKETTER.SRU file generated successfully.")

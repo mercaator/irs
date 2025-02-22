@@ -17,8 +17,8 @@ import json
 import sys
 import logging
 from pprint import pformat
-from sru import generate_info_sru, generate_blanketter_sru
-from data import process_transactions
+from k4sru.sru import generate_info_sru, generate_blanketter_sru
+from k4sru.data import process_transactions
 
 # This script processes stock trading data and generates Swedish tax reports (K4 SRU).
 

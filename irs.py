@@ -20,6 +20,8 @@ from pprint import pformat
 from k4sru.sru import generate_info_sru, generate_blanketter_sru
 from k4sru.data import process_transactions
 
+INPUT_DIR = 'input/'
+
 # This script processes stock trading data and generates Swedish tax reports (K4 SRU).
 
 
@@ -60,10 +62,10 @@ def create_cli_parser():
     parser.add_argument('--postnr', help='Postal code')
     parser.add_argument('--postort', help='City')
     parser.add_argument('--email', help='Email address')
-    parser.add_argument('--config', default='config.json', help='Path to configuration file')
-    parser.add_argument('--indata_ibkr', default='indata_ibkr.csv',
+    parser.add_argument('--config', default=f'{INPUT_DIR}config.json', help='Path to configuration file')
+    parser.add_argument('--indata_ibkr', default=f'{INPUT_DIR}indata_ibkr.csv',
                        help='Path to the input CSV file for k4 command')
-    parser.add_argument('--indata_bitstamp', default='indata_bitstamp.csv',
+    parser.add_argument('--indata_bitstamp', default=f'{INPUT_DIR}indata_bitstamp.csv',
                        help='Path to the input CSV file for k4 command')
     parser.add_argument('--debug', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        default='INFO', help='Set the debug level')
@@ -81,13 +83,13 @@ def handle_oldinfosru(args):
     generate_info_sru(args)
 
 def handle_infosru(args):
-    config = read_config(args.get('config', 'config.json'))
+    config = read_config(args.get('config', 'input/config.json'))
     generate_info_sru(config)
 
 def handle_k4(args):
-    config = read_config(args.get('config', 'config.json'))
-    filepath_ibkr = args.get('indata_ibkr', 'indata_ibkr.csv')
-    filepath_bitstamp = args.get('indata_bitstamp', 'indata_bitstamp.csv')
+    config = read_config(args.get('config', INPUT_DIR + 'config.json'))
+    filepath_ibkr = args.get('indata_ibkr', INPUT_DIR + 'indata_ibkr.csv')
+    filepath_bitstamp = args.get('indata_bitstamp', INPUT_DIR + 'indata_bitstamp.csv')
     year = args.get('year', 2024)
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
     transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year)

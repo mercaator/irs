@@ -93,11 +93,11 @@ def process_currency_sell(currency, amount, stocks_data):
         amount: Amount of currency bought
         currency_rate: Exchange rate to SEK
     """
-    logging.debug("      selling %s %s, %s/SEK = %s", -amount, currency, currency, stocks_data[currency]['avgprice'])
     if currency not in stocks_data:
         logging.error("Error: No BUY entry found for SELL entry %s", currency)
         sys.exit(1)
     else:
+        logging.debug("      selling %s %s, %s/SEK = %s", -amount, currency, currency, stocks_data[currency]['avgprice'])
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * stocks_data[currency]['avgprice']
 
@@ -168,19 +168,20 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date,
         currency_rate = currency_rates[(date, currency)] # <currency> / SEK rate
 
         logging.debug(f"   Action (1/2): Sell {currency} for {BASE_CURRENCY}")
+
         # Sell currency e.g. USD
         process_k4_entry(
             symbol=currency,
-            quantity=-quantity*trade_price+commission,
+            quantity= -(quantity*trade_price+commission),
             trade_price=currency_rate,
-            commission=0,
+            commission=0, # FOREX fee for automatic currency exchange included in IBCommission
             avg_price=stocks_data[currency]['avgprice'],
             currency=BASE_CURRENCY,
             date=date,
             k4_data=k4_data,
             currency_rates=currency_rates
         )
-        process_currency_sell(currency, quantity*trade_price-commission, stocks_data)
+        process_currency_sell(currency, quantity*trade_price+commission, stocks_data)
 
 
         logging.debug(f"   Action (2/2): Buy {base} for {quote}")

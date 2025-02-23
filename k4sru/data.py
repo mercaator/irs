@@ -19,14 +19,10 @@ import json
 from pprint import pformat
 from .sru import CURRENCY_CODES, OUTPUT_DIR
 
-stocks_data = {}
-k4_data = {}
-currency_rates = {}
-
 # Base currency for all calculations
 BASE_CURRENCY = "SEK"
 
-def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date):
+def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates):
     """Process a sell transaction for K4 tax reporting.
 
     Args:
@@ -44,32 +40,32 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
             k4_data[symbol] = {
                 'beteckning': symbol,
                 'antal': -quantity,
-                'forsaljningspris': -quantity * trade_price + commission,
+                'forsaljningspris': -quantity * trade_price - commission,
                 'omkostnadsbelopp': -quantity * avg_price
             }
         else:
             k4_data[symbol]['antal'] += -quantity
-            k4_data[symbol]['forsaljningspris'] += -quantity * trade_price + commission
+            k4_data[symbol]['forsaljningspris'] += -quantity * trade_price - commission
             k4_data[symbol]['omkostnadsbelopp'] += -quantity * avg_price
 
-        logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) - (-quantity * avg_price))
+        logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) - (-quantity * avg_price))
     else:
         currency_rate = currency_rates[(date, currency)] # USD.SEK rate
         if symbol not in k4_data:
             k4_data[symbol] = {
                 'beteckning': symbol,
                 'antal': -quantity,
-                'forsaljningspris': (-quantity * trade_price + commission) * currency_rate,
+                'forsaljningspris': (-quantity * trade_price - commission) * currency_rate,
                 'omkostnadsbelopp': (-quantity * avg_price)
             }
         else:
             k4_data[symbol]['antal'] += -quantity
-            k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price + commission) * currency_rate
+            k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price - commission) * currency_rate
             k4_data[symbol]['omkostnadsbelopp'] += (-quantity * avg_price)
 
-        logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price + commission) * currency_rate - (-quantity * avg_price))
+        logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
 
-def process_currency_buy(currency, amount, currency_rate):
+def process_currency_buy(currency, amount, currency_rate, stocks_data):
     """Process a currency transaction.
 
     Args:
@@ -80,8 +76,8 @@ def process_currency_buy(currency, amount, currency_rate):
     logging.debug("      buying %s %s, %s/SEK = %s", -amount, currency, currency, currency_rate)
     if currency not in stocks_data:
         stocks_data[currency] = {
-            'quantity': amount,
-            'totalprice': amount * currency_rate,
+            'quantity': -amount,
+            'totalprice': -amount * currency_rate,
             'avgprice': currency_rate
         }
     else:
@@ -89,7 +85,7 @@ def process_currency_buy(currency, amount, currency_rate):
         stocks_data[currency]['totalprice'] += -amount * currency_rate
         stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
 
-def process_currency_sell(currency, amount):
+def process_currency_sell(currency, amount, stocks_data):
     """Process a currency transaction.
 
     Args:
@@ -106,7 +102,7 @@ def process_currency_sell(currency, amount):
         stocks_data[currency]['totalprice'] += -amount * stocks_data[currency]['avgprice']
 
 
-def process_buy_entry(symbol, quantity, trade_price, commission, currency, date):
+def process_buy_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates):
     """Process a buy transaction.
 
     Args:
@@ -180,9 +176,11 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
             commission=0,
             avg_price=stocks_data[currency]['avgprice'],
             currency=BASE_CURRENCY,
-            date=date
+            date=date,
+            k4_data=k4_data,
+            currency_rates=currency_rates
         )
-        process_currency_sell(currency, quantity*trade_price-commission)
+        process_currency_sell(currency, quantity*trade_price-commission, stocks_data)
 
 
         logging.debug(f"   Action (2/2): Buy {base} for {quote}")
@@ -214,7 +212,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
     logging.debug("   Liquidity (USD): %.2f -- USD/SEK: %.2f", liquidity_usd, usd_sek)
     logging.debug("   Liquidity (EUR): %.2f -- EUR/SEK: %.2f", liquidity_eur, eur_sek)
 
-def process_sell_entry(symbol, quantity, trade_price, commission, currency, date):
+def process_sell_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates):
     """Process a sell transaction.
 
     Args:
@@ -268,7 +266,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
         currency_rate = currency_rates[(date, currency)] # USD.SEK rate
         logging.debug(f"   Action (1/2): Buy {currency} for {quote}")
-        process_currency_buy(currency, quantity * trade_price - commission, currency_rate)
+        process_currency_buy(currency, quantity * trade_price - commission, currency_rate, stocks_data)
 
         logging.debug(f"   Action (2/2): Sell {base} for {quote}")
         stocks_data[base]['quantity'] += quantity
@@ -281,7 +279,9 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         commission=commission,
         avg_price=stocks_data[base]['avgprice'],
         currency=currency,
-        date=date
+        date=date,
+        k4_data=k4_data,
+        currency_rates=currency_rates
     )
 
     if stocks_data[base]['quantity'] < 0.0001:  # handle float error with fractional shares
@@ -310,7 +310,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
 
 
-def process_input_data(data):
+def process_input_data(data, stocks_data, k4_data, currency_rates):
     for entry in data:
         date = entry['DateTime'].split(';')[0]
         symbol = entry['Symbol']
@@ -320,12 +320,14 @@ def process_input_data(data):
         currency = entry['CurrencyPrimary']
 
         if entry['Buy/Sell'] == 'BUY':
-            process_buy_entry(symbol, quantity, trade_price, commission, currency, date)
+            process_buy_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates)
         elif entry['Buy/Sell'] == 'SELL':
-            process_sell_entry(symbol, quantity, trade_price, commission, currency, date)
+            process_sell_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates)
 
-def process_trading_data(data):
-    process_input_data(data) # Updates global variables
+def process_trading_data(data, stocks_data, k4_data, currency_rates):
+    """Process the trading data for K4 tax reporting.
+    """
+    process_input_data(data, stocks_data, k4_data, currency_rates)
 
     logging.debug("Final K4 data:\n%s", pformat(k4_data, indent=4))
     logging.debug("Final stocks data:\n%s", pformat(stocks_data, indent=4))
@@ -423,13 +425,12 @@ def read_csv_bitstamp(filename):
 
     return trades_reader
 
-def process_currency_rates(rates):
+def process_currency_rates(rates, currency_rates):
     """Process currency exchange rates from the CSV file.
 
     Args:
         rates: List of dictionaries containing currency rate data
     """
-    global currency_rates
     for rate in rates:
         if rate['FromCurrency'] == 'SEK':
             date = rate['Date/Time'].split(';')[0]
@@ -480,7 +481,7 @@ def init_stocks_data(year):
         logging.error(f"Invalid JSON in input_portfolio_{year}.json")
         sys.exit(1)
 
-def save_stocks_data(year):
+def save_stocks_data(year, stocks_data):
     """Save the stocks data to a JSON file.
 
     Args:
@@ -492,7 +493,7 @@ def save_stocks_data(year):
         json.dump(filtered_stocks_data, file, indent=4)
     logging.info(f"Saved portfolio data for {year}")
 
-def process_transactions(filename_ibkr, filename_bitstamp, year):
+def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4_data, currency_rates):
     """Process the input file and generate tax reports.
 
     Args:
@@ -512,14 +513,14 @@ def process_transactions(filename_ibkr, filename_bitstamp, year):
         is_forex = 1 if '.' in trade['Symbol'] else 2
         return (date, is_forex)
 
-    process_currency_rates(currency_rates_csv)
+    process_currency_rates(currency_rates_csv, currency_rates)
     logging.debug("Currency rates:\n%s", pformat(currency_rates, indent=4))
 
     # Combine and sort trades
     sorted_trades = sorted(trades, key=sort_key)
-    processed_data = process_trading_data(sorted_trades)
+    processed_data = process_trading_data(sorted_trades, stocks_data, k4_data, currency_rates)
 
     # Save the processed data to a JSON file
-    save_stocks_data(year)
+    save_stocks_data(year, stocks_data)
 
     return post_process_trading_data(processed_data)

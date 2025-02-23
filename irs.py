@@ -22,8 +22,11 @@ from k4sru.data import process_transactions
 
 INPUT_DIR = 'input/'
 
-# This script processes stock trading data and generates Swedish tax reports (K4 SRU).
+stocks_data = {}
+k4_data = {}
+currency_rates = {}
 
+# This script processes stock trading data and generates Swedish tax reports (K4 SRU).
 
 def main():
     parser = create_cli_parser()
@@ -92,7 +95,7 @@ def handle_k4(args):
     filepath_bitstamp = args.get('indata_bitstamp', INPUT_DIR + 'indata_bitstamp.csv')
     year = args.get('year', 2024)
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
-    transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year)
+    transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates)
     generate_blanketter_sru(config, transactions)
 
 if __name__ == '__main__':

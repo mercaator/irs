@@ -26,7 +26,9 @@ class TestDataFunctions(unittest.TestCase):
 
     def setUp(self):
         self.currency_rates = {('20250101', 'USD'): 10.0,
-                               ('20250102', 'USD'): 11.0}
+                               ('20250102', 'USD'): 11.0,
+                               ('20250101', 'EUR'): 10.5,
+                               ('20250102', 'EUR'): 11.5}
 
     def test_process_k4_entry_001(self):
         k4_data = {}
@@ -145,6 +147,27 @@ class TestDataFunctions(unittest.TestCase):
         self.assertEqual(k4_data['USD']['antal'], 10*30+1) # 301
         self.assertEqual(k4_data['USD']['forsaljningspris'], 301*10.0) # 3010
         self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 301*9.0) # 2709
+
+    def test_process_buy_entry_004(self):
+        """UC-4. Buy currency pair where quote currency in not SEK e.g. EUR/USD for USD
+                 Transactions: Buy EUR, Sell USD
+        """
+        stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0} }
+        k4_data = {}
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('EUR.USD', 100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], 500-105-1) # 394
+        self.assertEqual(stocks_data['USD']['totalprice'], 394*9.0) # 3546
+        self.assertEqual(stocks_data['USD']['avgprice'], 9.0)
+        self.assertIn('EUR', stocks_data)
+        self.assertEqual(stocks_data['EUR']['quantity'], 100)
+        self.assertEqual(stocks_data['EUR']['totalprice'], (100*1.05+1)*10.0) # 1060
+        self.assertEqual(stocks_data['EUR']['avgprice'], 10.6)
+        self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 105+1) # 106
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 106*10.0) # 1060
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 106*9.0) # 954
 
     def test_process_sell_entry_001(self):
         stocks_data = {}

@@ -232,8 +232,6 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         base = symbol
         quote = BASE_CURRENCY
 
-
-
     if base not in stocks_data:
         if ' ' in base and any(c.isdigit() for c in base):
             # TODO: Handle options contracts
@@ -244,19 +242,17 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
             logging.error(f"Error: No BUY entry found for SELL entry {base}")
             sys.exit(1)
 
-
     if currency == BASE_CURRENCY:
         # UC-5. Sell stock in base currency e.g. sell ERIC-B for SEK
         #       Transactions: Sell ERIC-B
         # UC-6. Sell currency pair where quote currency is SEK e.g. USD/SEK
         #       Transactions: Sell USD
 
-        # Update currency rates with actual rate when available (e.g selling USD/SEK)
-        #if base in CURRENCY_CODES and quote == BASE_CURRENCY:
-        #    currency_rates[(date, base)] = trade_price
-        #    logging.debug(f"   Updated currency rate for {date} {base}: {currency_rates[(date, base)]}")
-
         logging.debug(f"   Action (1/1): Sell {base} for {quote}")
+        if stocks_data[base]['quantity'] + quantity < 0:
+            # TODO: Implement short selling
+            logging.warning("      Trying to sell %s %s, but only %s available ", -quantity, base, stocks_data[base]['quantity'])
+
         stocks_data[base]['quantity'] += quantity
         stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ commission
     else:
@@ -285,7 +281,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         currency_rates=currency_rates
     )
 
-    if stocks_data[base]['quantity'] < 0.0001:  # handle float error with fractional shares
+    if abs(stocks_data[base]['quantity']) < 0.0001:  # handle float error with fractional shares
         stocks_data[base]['quantity'] = 0
         stocks_data[base]['avgprice'] = 0
         if stocks_data[base]['totalprice'] < 0.0001:

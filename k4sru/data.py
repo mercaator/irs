@@ -263,7 +263,9 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
         currency_rate = currency_rates[(date, currency)] # USD.SEK rate
         logging.debug(f"   Action (1/2): Buy {currency} for {quote}")
-        process_currency_buy(currency, quantity * trade_price - commission, currency_rate, stocks_data)
+        # Quantity is negative for sell entries, commission is turned positive in process_input_data.
+        # Total amount of currency received is quantity * trade_price + commission e.g. -10 * 10 + 1 = -99
+        process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
 
         logging.debug(f"   Action (2/2): Sell {base} for {quote}")
         stocks_data[base]['quantity'] += quantity

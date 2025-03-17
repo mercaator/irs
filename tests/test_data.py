@@ -324,15 +324,94 @@ class TestDataFunctions(unittest.TestCase):
         """UC-6. Sell currency pair where quote currency is SEK e.g. USD/SEK
                  Transactions: Sell USD
         """
-        stocks_data = {}
+        stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0} }
         k4_data = {}
-        stocks_data['USD'] = {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0}
         # TODO: Short selling not supported
         process_sell_entry('USD', -200, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
         self.assertIn('USD', k4_data)
         self.assertEqual(stocks_data['USD']['quantity'], -100)
         self.assertEqual(stocks_data['USD']['totalprice'], -900)
         self.assertEqual(stocks_data['USD']['avgprice'], 9.0)
+
+    def test_process_sell_entry_030(self):
+        """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
+                 Transactions: Sell AAOI, Buy USD
+        """
+        stocks_data = {'AAOI': {'quantity': 10, 'totalprice': 3010, 'avgprice': 301} }
+        k4_data = {}
+        process_sell_entry('AAOI', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 1505)
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 301)
+        self.assertEqual(stocks_data['USD']['quantity'], 5*31-1) # 154
+        self.assertEqual(stocks_data['USD']['totalprice'], 154*10) # 1540
+        self.assertEqual(stocks_data['USD']['avgprice'], 1540/154) # 10.0
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 5)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], (5*31-1)*10) # 154
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 5*301) # 502.5
+
+
+    def test_process_sell_entry_031(self):
+        """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
+                 Transactions: Sell AAOI, Buy USD
+        """
+        stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0},
+                       'AAOI': {'quantity': 10, 'totalprice': 3010, 'avgprice': 301} }
+        k4_data = {}
+        process_sell_entry('AAOI', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 1505)
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 301)
+        self.assertEqual(stocks_data['USD']['quantity'], 100+5*31-1) # 254
+        self.assertEqual(stocks_data['USD']['totalprice'], 100*9+154*10) # 2440
+        self.assertEqual(stocks_data['USD']['avgprice'], 2440/254) # 9.606299212598426
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 5)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], (5*31-1)*10) # 154
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 5*301) # 502.5
+
+    def test_process_sell_entry_040(self):
+        """UC-8. Sell currency pair where quote currency in not SEK e.g. EUR/USD for USD
+                 Transactions: Sell EUR, Buy USD
+        """
+        stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0},
+                        'EUR': {'quantity': 100, 'totalprice': 950, 'avgprice': 9.5} }
+        k4_data = {}
+        process_sell_entry('EUR.USD', -100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], 500+105-1) # 604
+        self.assertEqual(stocks_data['USD']['totalprice'], 4500+104*10) # 5540
+        self.assertEqual(stocks_data['USD']['avgprice'], 5540/604) # 9.17
+        self.assertIn('EUR', stocks_data)
+        self.assertEqual(stocks_data['EUR']['quantity'], 0)
+        self.assertEqual(stocks_data['EUR']['totalprice'], 0)
+        self.assertEqual(stocks_data['EUR']['avgprice'], 0)
+        self.assertIn('EUR', k4_data)
+        self.assertEqual(k4_data['EUR']['antal'], 100)
+        self.assertEqual(k4_data['EUR']['forsaljningspris'], 104*10) # 1040
+        self.assertEqual(k4_data['EUR']['omkostnadsbelopp'], 100*9.5) # 950
+
+    def test_process_sell_entry_041(self):
+        """UC-8. Sell currency pair where quote currency in not SEK e.g. EUR/USD for USD
+                 Transactions: Sell EUR, Buy USD
+        """
+        stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0},
+                        'EUR': {'quantity': 100, 'totalprice': 950, 'avgprice': 9.5} }
+        k4_data = {}
+        process_sell_entry('USD.EUR', -100, 0.95, 1, 'EUR', '20250101', stocks_data, k4_data, self.currency_rates)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], 400) # 604
+        self.assertEqual(stocks_data['USD']['totalprice'], 4500-100*9) # 3600
+        self.assertEqual(stocks_data['USD']['avgprice'], 9.0)
+        self.assertIn('EUR', stocks_data)
+        self.assertEqual(stocks_data['EUR']['quantity'], 100+95-1) # 194
+        self.assertEqual(stocks_data['EUR']['totalprice'], 950+94*10.5) # 1937
+        self.assertEqual(stocks_data['EUR']['avgprice'], 1937/194) # 9.98
+        self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 100)
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 94*10.5) # 987
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 100*9) # 900
 
     def test_process_input_data_001(self):
         stocks_data = {}

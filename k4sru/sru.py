@@ -304,25 +304,31 @@ def generate_k4_blocks(k4_combined_transactions):
     """
     k4_a_rows = ""
     k4_c_rows = ""
+    k4_d_rows = ""
     k4_a_counter = 0
     k4_c_counter = 0
+    k4_d_counter = 0
 
     blocks_a = []
     blocks_c = []
+    blocks_d = []
 
     MAX_SHARE_ROWS = 9
     MAX_VALUTA_ROWS = 7
+    MAX_OTHER_ROWS = 7
 
     summa_forsaljningspris_a = 0
     summa_omkostnadsbelopp_a = 0
     summa_forsaljningspris_c = 0
     summa_omkostnadsbelopp_c = 0
+    summa_forsaljningspris_d = 0
+    summa_omkostnadsbelopp_d = 0
 
     for data in k4_combined_transactions:
         symbol = data['beteckning']
         forsaljningspris = data['forsaljningspris']
         omkostnadsbelopp = data['omkostnadsbelopp']
-        if symbol not in CURRENCY_CODES: # Aktier
+        if symbol not in CURRENCY_CODES and not (' ' in symbol and any(c.isdigit() for c in symbol)): # Aktier
             k4_a_counter += 1
             logging.debug(f"Aktie: {symbol} row {k4_a_counter}")
             k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, data)
@@ -337,6 +343,21 @@ def generate_k4_blocks(k4_combined_transactions):
                 summa_forsaljningspris_a = 0
                 summa_omkostnadsbelopp_a = 0
                 k4_a_rows = ""
+        elif symbol not in CURRENCY_CODES: # Other (options, BTC, etc.)
+            k4_d_counter += 1
+            logging.debug(f"Övriga värdepapper: {symbol} row {k4_d_counter}")
+            k4_d_rows += generate_row(k4_d_counter, K4_FIELD_CODES_D, symbol, data)
+            summa_forsaljningspris_d += forsaljningspris
+            summa_omkostnadsbelopp_d += omkostnadsbelopp
+
+            if k4_d_counter == MAX_SHARE_ROWS:
+                logging.debug(f"Aktie: A summary")
+                k4_d_rows += generate_summary(K4_FIELD_CODES_D, summa_forsaljningspris_d, summa_omkostnadsbelopp_d)
+                blocks_d.append(k4_d_rows)
+                k4_d_counter = 0
+                summa_forsaljningspris_d = 0
+                summa_omkostnadsbelopp_d = 0
+                k4_d_rows = ""
         else: # Valuta
             k4_c_counter += 1
             logging.debug(f"Valuta: {symbol} row {k4_c_counter}")
@@ -363,26 +384,37 @@ def generate_k4_blocks(k4_combined_transactions):
         k4_c_rows += generate_summary(K4_FIELD_CODES_C, summa_forsaljningspris_c, summa_omkostnadsbelopp_c)
         blocks_c.append(k4_c_rows)
 
-    return blocks_a, blocks_c
+    if k4_d_counter > 0:
+        logging.debug(f"Övriga värdepapper: D summary")
+        k4_d_rows += generate_summary(K4_FIELD_CODES_D, summa_forsaljningspris_d, summa_omkostnadsbelopp_d)
+        blocks_d.append(k4_d_rows)
 
-def assemble_blocks(config, blocks_a, blocks_c):
+    return blocks_a, blocks_c, blocks_d
+
+def assemble_blocks(config, blocks_a, blocks_c, blocks_d):
     """Assemble blocks into a single SRU file.
 
     Args:
         config: Dictionary containing configuration
         blocks_a: List of blocks for A
         blocks_c: List of blocks for C
+        blocks_d: List of blocks for D
     """
     file_content = ""
     logging.debug(f"Blocks A: {len(blocks_a)}")
     logging.debug(f"Blocks C: {len(blocks_c)}")
     logging.debug(f"Blocks C: {blocks_c}")
+    logging.debug(f"Blocks D: {len(blocks_d)}")
+    logging.debug(f"Blocks D: {blocks_d}")
     for i, block in enumerate(blocks_a, 1):
         file_content += generate_sru_header(config)
         file_content += block
         if len(blocks_c) > 0:
             file_content += blocks_c[0]
             del blocks_c[0]
+        if len(blocks_d) > 0:
+            file_content += blocks_d[0]
+            del blocks_d[0]
         file_content += generate_footer(i)
 
     # Improbable, but possible
@@ -390,6 +422,9 @@ def assemble_blocks(config, blocks_a, blocks_c):
         for i, block in enumerate(blocks_c, 1):
             file_content += generate_sru_header(config)
             file_content += block
+            if len(blocks_d) > 0:
+                file_content += blocks_d[0]
+                del blocks_d[0]
             file_content += generate_footer(i)
 
     return file_content
@@ -405,8 +440,8 @@ def generate_body(config, k4_combined_transactions):
         str: Formatted K4 data for SRU file
     """
     file_body = ""
-    blocks_a, blocks_c = generate_k4_blocks(k4_combined_transactions)
-    file_body += assemble_blocks(config, blocks_a, blocks_c)
+    blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions)
+    file_body += assemble_blocks(config, blocks_a, blocks_c, blocks_d)
     return file_body
 
 def generate_blanketter_sru(config, k4_combined_transactions):

@@ -161,9 +161,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date,
             quote = currency
 
         if ' ' in base and any(c.isdigit() for c in base):
-            # TODO: Handle options contracts
-            logging.info(f"    Skipping buy entry {base} as it is an options contract")
-            return
+            logging.info(f"    buy entry {base} is an options contract")
 
         currency_rate = currency_rates[(date, currency)] # <currency> / SEK rate
 
@@ -234,9 +232,12 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
     if base not in stocks_data:
         if ' ' in base and any(c.isdigit() for c in base):
-            # TODO: Handle options contracts
-            logging.info(f"    Skipping sell entry {base} as it is an options contract")
-            return
+            logging.info(f"    sell entry {base} is an options contract")
+            stocks_data[base] = {
+                'quantity': 0,
+                'totalprice': 0,
+                'avgprice': 0
+            }
         else:
             logging.debug(f"stocks_data: {stocks_data}")
             logging.error(f"Error: No BUY entry found for SELL entry {base}")
@@ -505,18 +506,22 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
     init_stocks_data(year)
 
     # Create a sorting key function that puts forex trades before stock trades on the same date
-    def sort_key(trade):
-        # Extract just the date part (before the semicolon)
+    # and puts BUY entries before SELL entries for options
+    def sort_key_combined(trade):
         date = trade['DateTime'].split(';')[0]
-        # For same date, forex trades (with '.' in symbol) should come first
         is_forex = 1 if '.' in trade['Symbol'] else 2
-        return (date, is_forex)
+        if ' ' in trade['Symbol'] and any(c.isdigit() for c in trade['Symbol']):
+            # For options, multiply the trade price by 100 as the quantity is in lots
+            trade['TradePrice'] = float(trade['TradePrice']) * 100
+            return (trade['Symbol'], 1 if trade['Buy/Sell'] == 'BUY' else 2)
+        else:
+            return (date, is_forex, 3)
 
     process_currency_rates(currency_rates_csv, currency_rates)
     logging.debug("Currency rates:\n%s", pformat(currency_rates, indent=4))
 
     # Combine and sort trades
-    sorted_trades = sorted(trades, key=sort_key)
+    sorted_trades = sorted(trades, key=sort_key_combined)
     processed_data = process_trading_data(sorted_trades, stocks_data, k4_data, currency_rates)
 
     # Save the processed data to a JSON file

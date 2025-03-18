@@ -95,9 +95,10 @@ class TestSRUFunctions(unittest.TestCase):
             {'beteckning': 'AAPL', 'antal': 10, 'forsaljningspris': 1000, 'omkostnadsbelopp': 800},
             {'beteckning': 'USD', 'antal': 100, 'forsaljningspris': 1000, 'omkostnadsbelopp': 900}
         ]
-        blocks_a, blocks_c = generate_k4_blocks(k4_combined_transactions)
+        blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions)
         self.assertEqual(len(blocks_a), 1)
         self.assertEqual(len(blocks_c), 1)
+        self.assertEqual(len(blocks_d), 0)
 
     def test_assemble_blocks_001(self):
         config = {
@@ -106,7 +107,8 @@ class TestSRUFunctions(unittest.TestCase):
         }
         blocks_a = ["#UPPGIFT 3100 10\n#UPPGIFT 3101 AAPL\n#UPPGIFT 3102 1000\n#UPPGIFT 3103 800\n#UPPGIFT 3104 200\n#UPPGIFT 3105 0\n"]
         blocks_c = ["#UPPGIFT 3310 100\n#UPPGIFT 3311 USD\n#UPPGIFT 3312 1000\n#UPPGIFT 3313 900\n#UPPGIFT 3314 100\n#UPPGIFT 3315 0\n"]
-        file_content = assemble_blocks(config, blocks_a, blocks_c)
+        blocks_d = []
+        file_content = assemble_blocks(config, blocks_a, blocks_c, blocks_d)
         self.assertIn("#UPPGIFT 3100 10\n", file_content)
         self.assertIn("#UPPGIFT 3310 100\n", file_content)
         self.assertIn("#BLANKETTSLUT\n", file_content)

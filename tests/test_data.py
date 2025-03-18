@@ -205,8 +205,15 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0} }
         k4_data = {}
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('IBIT  241213P00055000', 1, 0.28, 0.29, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
-        self.assertNotIn('IBIT  241213P00055000', stocks_data)
+        process_buy_entry('IBIT  241213P00055000', 1, 28, 0.29, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        self.assertIn('IBIT  241213P00055000', stocks_data)
+        self.assertEqual(stocks_data['IBIT  241213P00055000']['quantity'], 1)
+        self.assertEqual(stocks_data['IBIT  241213P00055000']['totalprice'], (28+0.29)*10) # 28.29
+        self.assertEqual(stocks_data['IBIT  241213P00055000']['avgprice'], 282.9)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], 500 - 28.29) # 471.71
+        self.assertEqual(stocks_data['USD']['totalprice'], 4500 - 28.29*9.0) # 4500 - 254.61 = 4245.39
+        self.assertEqual(stocks_data['USD']['avgprice'], 9.0)
 
     def test_process_buy_entry_040(self):
         """UC-4. Buy currency pair where quote currency in not SEK e.g. EUR/USD for USD

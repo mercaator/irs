@@ -34,8 +34,28 @@ def main():
 
     # Set up logging based on debug level
     logging_level = getattr(logging, args['debug'])
-    logging.basicConfig(level=logging_level,
-                       format='%(asctime)s - %(levelname)s - %(message)s')
+
+    # Create a logger
+    logger = logging.getLogger()
+    logger.setLevel(logging_level)
+
+    # Create a console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging_level)
+
+    # Create a file handler
+    file_handler = logging.FileHandler('output/irs.log')
+    file_handler.setLevel(logging_level)
+
+    # Create a formatter and set it for both handlers
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
+
+    # Add both handlers to the logger
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
 
     logging.debug("Parsed arguments: %s", args)
 

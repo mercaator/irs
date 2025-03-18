@@ -150,6 +150,65 @@ K4_FIELD_CODES_C = {
     'summa_forlust': '3404'
 }
 
+# D. Övriga värdepapper, andra tillgångar (kapitalplaceringar t.ex. råvaror, kryptovalutor) m.m.
+#       Ant. Bet. F.   Om.  V.   F.
+# Rad 1 3410 3411 3412 3413 3414 3415
+# Rad 2 3420 3421 3422 3423 3424 3425
+# Rad 3 3430 3431 3432 3433 3434 3435
+# Rad 4 3440 3441 3442 3443 3444 3445
+# Rad 5 3450 3451 3452 3453 3454 3455
+# Rad 6 3460 3461 3462 3463 3464 3465
+# Rad 7 3470 3471 3472 3473 3474 3475
+# Summa           3500 3501 3503 3504
+K4_FIELD_CODES_D = {
+    1 : {'antal': '3410',
+         'beteckning': '3411',
+         'forsaljningspris': '3412',
+         'omkostnadsbelopp': '3413',
+         'vinst': '3414',
+         'forlust': '3415'},
+    2 : {'antal': '3420',
+         'beteckning': '3421',
+         'forsaljningspris': '3422',
+         'omkostnadsbelopp': '3423',
+         'vinst': '3424',
+         'forlust': '3425'},
+    3 : {'antal': '3430',
+         'beteckning': '3431',
+         'forsaljningspris': '3432',
+         'omkostnadsbelopp': '3433',
+         'vinst': '3434',
+         'forlust': '3435'},
+    4 : {'antal': '3440',
+         'beteckning': '3441',
+         'forsaljningspris': '3442',
+         'omkostnadsbelopp': '3443',
+         'vinst': '3444',
+         'forlust': '3445'},
+    5 : {'antal': '3450',
+         'beteckning': '3451',
+         'forsaljningspris': '3452',
+         'omkostnadsbelopp': '3453',
+         'vinst': '3454',
+         'forlust': '3455'},
+    6 : {'antal': '3460',
+         'beteckning': '3461',
+         'forsaljningspris': '3462',
+         'omkostnadsbelopp': '3463',
+         'vinst': '3464',
+         'forlust': '3465'},
+    7 : {'antal': '3470',
+         'beteckning': '3471',
+         'forsaljningspris': '3472',
+         'omkostnadsbelopp': '3473',
+         'vinst': '3474',
+         'forlust': '3475'},
+    'summa_forsaljningspris': '3500',
+    'summa_omkostnadsbelopp': '3501',
+    'summa_vinst': '3503',
+    'summa_forlust': '3504'
+}
+
 CURRENCY_CODES = ['USD', 'EUR', 'GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'CAD', 'AUD', 'NZD', 'JPY', 'CNY', 'HKD', 'MXN', 'BRL', 'ARS', 'CLP', 'COP', 'PEN', 'UYU', 'PYG']
 
 def generate_info_sru(data):

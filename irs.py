@@ -18,7 +18,7 @@ import sys
 import logging
 from pprint import pformat
 from k4sru.sru import generate_info_sru, generate_blanketter_sru
-from k4sru.data import process_transactions
+from k4sru.data import init_currency_rates, init_stocks_data, process_transactions, save_stocks_data
 
 INPUT_DIR = 'input/'
 
@@ -72,7 +72,6 @@ def main():
             handle_k4(args)
 
 
-
 def create_cli_parser():
     parser = argparse.ArgumentParser(prog='irs')
     parser.add_argument('commands', nargs='+', choices=['oldinfosru', 'infosru', 'k4'],
@@ -92,7 +91,7 @@ def create_cli_parser():
                        help='Path to the input CSV file for k4 command')
     parser.add_argument('--debug', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        default='INFO', help='Set the debug level')
-    parser.add_argument('--year', default=2024, help='Year to process')
+    parser.add_argument('--year', default=2025, help='Year to process')
 
     return parser
 
@@ -115,7 +114,10 @@ def handle_k4(args):
     filepath_bitstamp = args.get('indata_bitstamp', INPUT_DIR + 'indata_bitstamp.csv')
     year = args.get('year', 2024)
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
+    stocks_data = init_stocks_data(year)
     transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates)
+    # Save the processed data to a JSON file
+    save_stocks_data(year, stocks_data)
     generate_blanketter_sru(config, transactions)
 
 if __name__ == '__main__':

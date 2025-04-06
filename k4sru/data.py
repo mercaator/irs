@@ -367,35 +367,8 @@ def read_csv_ibkr(filename):
     return trades_reader, rates_reader
 
 
-def convert_buy_sell(trade_type):
-    """Convert trade type to BUY/SELL.
-
-    Args:
-        trade_type: Trade type (buy/sell)
-    """
-    if trade_type == 'Buy':
-        return 'BUY'
-    elif trade_type == 'Sell':
-        return 'SELL'
-    else:
-        return trade_type
-
-def convert_datetime(datetime):
-    """Convert datetime to the format used in the output file.
-
-    Args:
-        datetime: Datetime string
-    """
-    # Input format: 2013-04-22T20:06:43Z
-    # Output format: "20241125;095441"
-    date, time = datetime.split('T')
-    date = date.replace('-', '')
-    time = time.replace('Z', '').replace(':', '')
-    return f"{date};{time}"
-
-
 def read_csv_bitstamp(filename):
-    """Read CSV file with Bitstamp transactions.
+    """Read CSV file with Bitstamp transactions. The file is expected to be in IBRK format.
 
     Args:
         filename: Path to the CSV file
@@ -406,26 +379,13 @@ def read_csv_bitstamp(filename):
     with open(filename, 'r') as csvfile:
         lines = csvfile.readlines()
         trades_reader = list(csv.DictReader(lines))
-        # Convert bitstamp CVS into IBRK format
-        # From: ID,Account,Type,Subtype,Datetime,Amount,Amount currency,Value,Value currency,Rate,Rate currency,Fee,Fee currency,Order ID
-        # To: "DateTime","Symbol","Buy/Sell","Quantity","TradePrice","IBCommission","CurrencyPrimary"
-        bitstamp_trades = []
-        for trade in trades_reader:
-            bitstamp_trade = {}
-            bitstamp_trade['DateTime'] = convert_datetime(trade['Datetime'])
-            bitstamp_trade['Symbol'] = trade['Amount currency']
-            bitstamp_trade['Buy/Sell'] = convert_buy_sell(trade['Type'])
-            bitstamp_trade['Quantity'] = trade['Amount']
-            bitstamp_trade['TradePrice'] = trade['Value']
-            bitstamp_trade['IBCommission'] = trade['Fee']
-            bitstamp_trade['CurrencyPrimary'] = trade['Value currency']
-            bitstamp_trades.append(bitstamp_trade)
-        # logging.debug(f"Processed {len(trades_reader)} Bitstamp trades")
-        # logging.debug("==> Bitstamp trades:\n%s", pformat(bitstamp_trades, indent=4))
+        logging.debug(f"Processed {len(trades_reader)} Bitstamp trades")
+        logging.debug("==> Bitstamp trades:\n%s", pformat(trades_reader, indent=4))
 
     return trades_reader
 
-def process_currency_rates(rates, currency_rates):
+
+def process_currency_rates(rates, currency_rates, year):
     """Process currency exchange rates from the CSV file.
 
     Args:
@@ -445,7 +405,16 @@ def process_currency_rates(rates, currency_rates):
         if key[1] == 'EUR':
             usdsek = currency_rates[(key[0], 'USD')]
             currency_rates[key] = usdsek * value
-    logging.info("==> Currency rates 2:\n%s", pformat(currency_rates, indent=4))
+
+    # Load predefined currency rates and merge with the processed rates above
+    currency_rates_init = init_currency_rates(year)
+
+    # Merge the two dictionaries
+    for key, value in currency_rates_init.items():
+        if key not in currency_rates:
+            currency_rates[key] = value
+
+    logging.info("==> Currency rates:\n%s", pformat(currency_rates, indent=4))
 
 def post_process_trading_data(combined_trades):
     """Post-process the trading data for K4 tax reporting as the system handles only integer values.
@@ -469,16 +438,37 @@ def init_stocks_data(year):
     Args:
         year: The year to initialize the stocks data for
     """
-    global stocks_data
     try:
-        with open(f'input_portfolio_{year}.json', 'r') as file:
+        with open(f'input/input_portfolio_{year}.json', 'r') as file:
             stocks_data = json.load(file)
         logging.info(f"Loaded portfolio data for {year}")
         logging.debug("Portfolio data:\n%s", pformat(stocks_data, indent=4))
+        return stocks_data
     except FileNotFoundError:
         logging.info(f"Portfolio file input_portfolio_{year}.json not found")
     except json.JSONDecodeError:
         logging.error(f"Invalid JSON in input_portfolio_{year}.json")
+        sys.exit(1)
+
+def init_currency_rates(year):
+    """Initialize the currency rates for the given year.
+
+    Args:
+        year: The year to initialize the currency rates for
+    """
+    try:
+        with open(f'input/input_currency_rates_{year}.json', 'r') as file:
+            currency_rates_raw = json.load(file)
+            # Convert string keys back to tuple keys
+            currency_rates = {tuple(key.split("_")): value for key, value in currency_rates_raw.items()}
+        logging.info(f"Loaded currency rates for {year}")
+        logging.debug("Currency rates:\n%s", pformat(currency_rates, indent=4))
+        return currency_rates
+    except FileNotFoundError:
+        logging.info(f"Currency rates file input_currency_rates_{year}.json not found")
+        return {}
+    except json.JSONDecodeError:
+        logging.error(f"Invalid JSON in input_currency_rates_{year}.json")
         sys.exit(1)
 
 def save_stocks_data(year, stocks_data):
@@ -501,9 +491,10 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
     """
     trades, currency_rates_csv = read_csv_ibkr(filename_ibkr)
     # TODO: Implement Bitstamp CSV processing
-    # trades_bitstamp = read_csv_bitstamp(filename_bitstamp)
+    trades_bitstamp = read_csv_bitstamp(filename_bitstamp)
 
-    init_stocks_data(year)
+    # Combine trades from both sources
+    trades.extend(trades_bitstamp)
 
     # Create a sorting key function that puts forex trades before stock trades on the same date
     # and puts BUY entries before SELL entries for options
@@ -517,14 +508,10 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
         else:
             return (date, is_forex, 3)
 
-    process_currency_rates(currency_rates_csv, currency_rates)
-    logging.debug("Currency rates:\n%s", pformat(currency_rates, indent=4))
+    process_currency_rates(currency_rates_csv, currency_rates, year)
 
     # Combine and sort trades
     sorted_trades = sorted(trades, key=sort_key_combined)
     processed_data = process_trading_data(sorted_trades, stocks_data, k4_data, currency_rates)
-
-    # Save the processed data to a JSON file
-    save_stocks_data(year, stocks_data)
 
     return post_process_trading_data(processed_data)

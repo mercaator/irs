@@ -446,6 +446,8 @@ def init_stocks_data(year):
         return stocks_data
     except FileNotFoundError:
         logging.info(f"Portfolio file input_portfolio_{year}.json not found")
+        # Initialize an empty portfolio if the file is not found
+        return {}
     except json.JSONDecodeError:
         logging.error(f"Invalid JSON in input_portfolio_{year}.json")
         sys.exit(1)

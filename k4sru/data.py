@@ -492,8 +492,11 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
         filename: Path to the input CSV file
     """
     trades, currency_rates_csv = read_csv_ibkr(filename_ibkr)
-    # TODO: Implement Bitstamp CSV processing
-    trades_bitstamp = read_csv_bitstamp(filename_bitstamp)
+
+    # Read Bitstamp trades
+    trades_bitstamp = []
+    if filename_bitstamp:
+        trades_bitstamp = read_csv_bitstamp(filename_bitstamp)
 
     # Combine trades from both sources
     trades.extend(trades_bitstamp)

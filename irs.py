@@ -87,8 +87,7 @@ def create_cli_parser():
     parser.add_argument('--config', default=f'{INPUT_DIR}config.json', help='Path to configuration file')
     parser.add_argument('--indata_ibkr', default=f'{INPUT_DIR}indata_ibkr.csv',
                        help='Path to the input CSV file for k4 command')
-    parser.add_argument('--indata_bitstamp', default=f'{INPUT_DIR}indata_bitstamp.csv',
-                       help='Path to the input CSV file for k4 command')
+    parser.add_argument('--indata_bitstamp', help='Path to the input CSV file for k4 command')
     parser.add_argument('--debug', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        default='INFO', help='Set the debug level')
     parser.add_argument('--year', default=2025, help='Year to process')

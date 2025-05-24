@@ -284,6 +284,17 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         currency_rates=currency_rates
     )
 
+    # Handle fractional "shares" (satoshis) of BTC as most probably fees cause final quantity to be more than 0.0001
+    # that was set to handle float errors with fractional shares.
+    if base == 'BTC' and abs(stocks_data[base]['quantity']) < 0.002:
+        logging.warning("Sell entry processed for %s with satoshis, quantity: %s", base, stocks_data[base]['quantity'])
+        stocks_data[base]['quantity'] = 0
+        stocks_data[base]['avgprice'] = 0
+        if stocks_data[base]['totalprice'] < 100.0:
+            stocks_data[base]['totalprice'] = 0
+        else:
+            logging.info("Sell entry processed for %s with satoshis, totalprice not zero: %s", base, stocks_data[base]['totalprice'])
+
     if abs(stocks_data[base]['quantity']) < 0.0001:  # handle float error with fractional shares
         stocks_data[base]['quantity'] = 0
         stocks_data[base]['avgprice'] = 0

@@ -18,13 +18,16 @@ import sys
 import logging
 from pprint import pformat
 from k4sru.sru import generate_info_sru, generate_blanketter_sru
-from k4sru.data import init_currency_rates, init_stocks_data, process_transactions, save_stocks_data
+from k4sru.data import init_currency_rates, init_stocks_data, process_transactions, save_stocks_data, save_statistics_data
 
 INPUT_DIR = 'input/'
 
 stocks_data = {}
 k4_data = {}
 currency_rates = {}
+
+# Detailed statistics data that will be stored in a CSV file
+statistics_data = []
 
 # This script processes stock trading data and generates Swedish tax reports (K4 SRU).
 
@@ -114,9 +117,10 @@ def handle_k4(args):
     year = args.get('year', 2024)
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
     stocks_data = init_stocks_data(year)
-    transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates)
+    transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates, statistics_data)
     # Save the processed data to a JSON file
     save_stocks_data(year, stocks_data)
+    save_statistics_data(year, statistics_data)
     generate_blanketter_sru(config, transactions)
 
 if __name__ == '__main__':

@@ -14,7 +14,7 @@
 
 import unittest
 import logging
-from k4sru.sru import generate_info_sru, generate_sru_header, clean_symbol, generate_row, generate_footer, generate_summary, generate_k4_blocks, assemble_blocks
+from k4sru.sru import generate_info_sru, generate_sru_header, generate_description, generate_row, generate_footer, generate_summary, generate_k4_blocks, assemble_blocks
 from k4sru.sru import K4_FIELD_CODES_A, K4_FIELD_CODES_C, OUTPUT_DIR
 
 class TestSRUFunctions(unittest.TestCase):
@@ -61,9 +61,9 @@ class TestSRUFunctions(unittest.TestCase):
         self.assertIn("#IDENTITET 1234567890", header)
         self.assertIn("#NAMN Test Company\n", header)
 
-    def test_clean_symbo_001(self):
-        self.assertEqual(clean_symbol("AAPL.SEK"), "AAPL")
-        self.assertEqual(clean_symbol("GOOGL"), "GOOGL")
+    def test_generate_symbol_001(self):
+        self.assertEqual(generate_description("AAPL.SEK","Test",False), "AAPL")
+        self.assertEqual(generate_description("GOOGL", "Test", False), "GOOGL")
 
     def test_generate_row_001(self):
         data = {
@@ -71,7 +71,7 @@ class TestSRUFunctions(unittest.TestCase):
             'forsaljningspris': 1000,
             'omkostnadsbelopp': 800
         }
-        row = generate_row(1, K4_FIELD_CODES_A, "AAPL", data)
+        row = generate_row(1, K4_FIELD_CODES_A, "AAPL", "", data, False)
         self.assertIn("#UPPGIFT 3100 10\n", row)
         self.assertIn("#UPPGIFT 3101 AAPL\n", row)
         self.assertIn("#UPPGIFT 3102 1000\n", row)
@@ -92,10 +92,10 @@ class TestSRUFunctions(unittest.TestCase):
 
     def test_generate_k4_blocks_001(self):
         k4_combined_transactions = [
-            {'beteckning': 'AAPL', 'antal': 10, 'forsaljningspris': 1000, 'omkostnadsbelopp': 800},
-            {'beteckning': 'USD', 'antal': 100, 'forsaljningspris': 1000, 'omkostnadsbelopp': 900}
+            {'beteckning': 'AAPL', 'beskrivning': '','antal': 10, 'forsaljningspris': 1000, 'omkostnadsbelopp': 800},
+            {'beteckning': 'USD', 'beskrivning' : '', 'antal': 100, 'forsaljningspris': 1000, 'omkostnadsbelopp': 900}
         ]
-        blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions)
+        blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions, False)
         self.assertEqual(len(blocks_a), 1)
         self.assertEqual(len(blocks_c), 1)
         self.assertEqual(len(blocks_d), 0)

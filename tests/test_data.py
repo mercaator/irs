@@ -32,7 +32,8 @@ class TestDataFunctions(unittest.TestCase):
 
     def test_process_k4_entry_001(self):
         k4_data = {}
-        process_k4_entry('ERIC-B', -10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates)
+        statistics_data = []
+        process_k4_entry('ERIC-B', 'Ericsson', -10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(k4_data['ERIC-B']['antal'], 10)
         self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 10*100-1)
@@ -40,7 +41,8 @@ class TestDataFunctions(unittest.TestCase):
 
     def test_process_k4_entry_002(self):
         k4_data = {}
-        process_k4_entry('ERIC-B', -10, 80, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates)
+        statistics_data = []
+        process_k4_entry('ERIC-B', 'Ericsson', -10, 80, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(k4_data['ERIC-B']['antal'], 10)
         self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 10*80-1)
@@ -48,7 +50,8 @@ class TestDataFunctions(unittest.TestCase):
 
     def test_process_k4_entry_003(self):
         k4_data = { 'ERIC-B': {'antal': 10, 'forsaljningspris': 950, 'omkostnadsbelopp': 900} }
-        process_k4_entry('ERIC-B', -10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates)
+        statistics_data = []
+        process_k4_entry('ERIC-B', 'Ericsson',-10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(k4_data['ERIC-B']['antal'], 20)
         self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 950 + (10*100-1)) # 1949
@@ -56,7 +59,8 @@ class TestDataFunctions(unittest.TestCase):
 
     def test_process_k4_entry_004(self):
         k4_data = {}
-        process_k4_entry('AAOI', -10, 30, 1, 290, 'USD', '20250101', k4_data, self.currency_rates)
+        statistics_data = []
+        process_k4_entry('AAOI', 'Applied Optoelectronics Inc', -10, 30, 1, 290, 'USD', '20250101', k4_data, self.currency_rates, statistics_data)
         self.assertIn('AAOI', k4_data)
         self.assertEqual(k4_data['AAOI']['antal'], 10)
         self.assertEqual(k4_data['AAOI']['forsaljningspris'], (10*30-1)*10.0)
@@ -64,7 +68,8 @@ class TestDataFunctions(unittest.TestCase):
 
     def test_process_k4_entry_005(self):
         k4_data = { 'AAOI': {'antal': 10, 'forsaljningspris': 3000, 'omkostnadsbelopp': 2900} }
-        process_k4_entry('AAOI', -10, 30, 1, 290, 'USD', '20250102', k4_data, self.currency_rates)
+        statistics_data = []
+        process_k4_entry('AAOI', 'Applied Optoelectronics Inc', -10, 30, 1, 290, 'USD', '20250102', k4_data, self.currency_rates, statistics_data)
         self.assertIn('AAOI', k4_data)
         self.assertEqual(k4_data['AAOI']['antal'], 20)
         self.assertEqual(k4_data['AAOI']['forsaljningspris'], 3000 + ((10*30-1)*11.0)) # 6289
@@ -107,8 +112,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('ERIC-B', 10, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('ERIC-B', 'Ericsson', 10, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', stocks_data)
         self.assertEqual(stocks_data['ERIC-B']['quantity'], 10)
         self.assertEqual(stocks_data['ERIC-B']['totalprice'], 10*100+5) # 1005
@@ -120,8 +126,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {'ERIC-B': {'quantity': 10, 'totalprice': 800, 'avgprice': 80}}
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('ERIC-B', 10, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('ERIC-B', 'Ericsson', 10, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', stocks_data)
         self.assertEqual(stocks_data['ERIC-B']['quantity'], 20)
         self.assertEqual(stocks_data['ERIC-B']['totalprice'], 10*100+5+800) # 1805
@@ -133,8 +140,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('USD.SEK', 100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('USD.SEK', '', 100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 100)
         self.assertEqual(stocks_data['USD']['totalprice'], 10*100+1) # 1001
@@ -146,8 +154,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0} }
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('USD.SEK', 100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('USD.SEK', '', 100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 200)
         self.assertEqual(stocks_data['USD']['totalprice'], 10*100+1+900) # 1901
@@ -159,8 +168,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0} }
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('AAOI', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('AAOI', 'Applied Optoelectronics Inc', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('AAOI', stocks_data)
         self.assertEqual(stocks_data['AAOI']['quantity'], 10)
         self.assertEqual(stocks_data['AAOI']['totalprice'], (10*30+1)*10.0) # 3010
@@ -181,8 +191,9 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0},
                         'AAOI': {'quantity': 10, 'totalprice': 2250, 'avgprice': 225}}
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('AAOI', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('AAOI', 'Applied Optoelectronics Inc', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('AAOI', stocks_data)
         self.assertEqual(stocks_data['AAOI']['quantity'], 20)
         self.assertEqual(stocks_data['AAOI']['totalprice'], (10*30+1)*10.0+2250) # 5260
@@ -204,8 +215,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0} }
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('IBIT  241213P00055000', 1, 28, 0.29, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('IBIT  241213P00055000', '', 1, 28, 0.29, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('IBIT  241213P00055000', stocks_data)
         self.assertEqual(stocks_data['IBIT  241213P00055000']['quantity'], 1)
         self.assertEqual(stocks_data['IBIT  241213P00055000']['totalprice'], (28+0.29)*10) # 28.29
@@ -221,8 +233,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0} }
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('EUR.USD', 100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('EUR.USD', '', 100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 500-105-1) # 394
         self.assertEqual(stocks_data['USD']['totalprice'], 394*9.0) # 3546
@@ -243,8 +256,9 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0},
                         'EUR': {'quantity': 100, 'totalprice': 950, 'avgprice': 9.5} }
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_buy_entry('EUR.USD', 100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_buy_entry('EUR.USD', '', 100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 500-105-1) # 394
         self.assertEqual(stocks_data['USD']['totalprice'], 394*9.0) # 3546
@@ -264,8 +278,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         stocks_data['ERIC-B'] = {'quantity': 10, 'totalprice': 1005, 'avgprice': 100.5}
-        process_sell_entry('ERIC-B', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates)
+        process_sell_entry('ERIC-B', 'Ericsson', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertEqual(stocks_data['ERIC-B']['quantity'], 5)
         self.assertEqual(stocks_data['ERIC-B']['totalprice'], 502.5)
         self.assertEqual(stocks_data['ERIC-B']['avgprice'], 100.5)
@@ -280,9 +295,10 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         with self.assertRaises(SystemExit) as cm:
             # TODO: Short selling not supported
-            process_sell_entry('ERIC-B', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates)
+            process_sell_entry('ERIC-B', 'Ericsson', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertEqual(cm.exception.code, 1)
 
     def test_process_sell_entry_012(self):
@@ -291,9 +307,10 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         stocks_data['ERIC-B'] = {'quantity': 5, 'totalprice': 502.5, 'avgprice': 100.5}
         # TODO: Short selling not supported
-        process_sell_entry('ERIC-B', -10, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates)
+        process_sell_entry('ERIC-B', 'Ericsson', -10, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(stocks_data['ERIC-B']['quantity'], -5)
         self.assertEqual(stocks_data['ERIC-B']['totalprice'], -502.5)
@@ -305,8 +322,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0} }
         k4_data = {}
+        statistics_data = []
         # Commission is changed to positive value when processing buy entry called from process_input_data
-        process_sell_entry('USD.SEK', -100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_sell_entry('USD.SEK', '', -100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 0)
         self.assertEqual(stocks_data['USD']['totalprice'], 0)
@@ -322,9 +340,10 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         with self.assertRaises(SystemExit) as cm:
             # TODO: Short selling not supported
-            process_sell_entry('USD', -100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+            process_sell_entry('USD', '', -100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertEqual(cm.exception.code, 1)
 
     def test_process_sell_entry_022(self):
@@ -333,8 +352,9 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0} }
         k4_data = {}
+        statistics_data = []
         # TODO: Short selling not supported
-        process_sell_entry('USD', -200, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates)
+        process_sell_entry('USD', '', -200, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', k4_data)
         self.assertEqual(stocks_data['USD']['quantity'], -100)
         self.assertEqual(stocks_data['USD']['totalprice'], -900)
@@ -346,7 +366,8 @@ class TestDataFunctions(unittest.TestCase):
         """
         stocks_data = {'AAOI': {'quantity': 10, 'totalprice': 3010, 'avgprice': 301} }
         k4_data = {}
-        process_sell_entry('AAOI', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        statistics_data = []
+        process_sell_entry('AAOI', 'Applied Optoelectronics Inc', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertEqual(stocks_data['AAOI']['quantity'], 5)
         self.assertEqual(stocks_data['AAOI']['totalprice'], 1505)
         self.assertEqual(stocks_data['AAOI']['avgprice'], 301)
@@ -366,7 +387,8 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0},
                        'AAOI': {'quantity': 10, 'totalprice': 3010, 'avgprice': 301} }
         k4_data = {}
-        process_sell_entry('AAOI', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        statistics_data = []
+        process_sell_entry('AAOI', 'Applied Optoelectronics Inc', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertEqual(stocks_data['AAOI']['quantity'], 5)
         self.assertEqual(stocks_data['AAOI']['totalprice'], 1505)
         self.assertEqual(stocks_data['AAOI']['avgprice'], 301)
@@ -385,7 +407,8 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0},
                         'EUR': {'quantity': 100, 'totalprice': 950, 'avgprice': 9.5} }
         k4_data = {}
-        process_sell_entry('EUR.USD', -100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates)
+        statistics_data = []
+        process_sell_entry('EUR.USD', '', -100, 1.05, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 500+105-1) # 604
         self.assertEqual(stocks_data['USD']['totalprice'], 4500+104*10) # 5540
@@ -406,7 +429,8 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = { 'USD': {'quantity': 500, 'totalprice': 4500, 'avgprice': 9.0},
                         'EUR': {'quantity': 100, 'totalprice': 950, 'avgprice': 9.5} }
         k4_data = {}
-        process_sell_entry('USD.EUR', -100, 0.95, 1, 'EUR', '20250101', stocks_data, k4_data, self.currency_rates)
+        statistics_data = []
+        process_sell_entry('USD.EUR', '', -100, 0.95, 1, 'EUR', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 400) # 604
         self.assertEqual(stocks_data['USD']['totalprice'], 4500-100*9) # 3600
@@ -423,11 +447,12 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_input_data_001(self):
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         data = [
-            {'DateTime': '20250101;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'BUY', 'Quantity': '10', 'TradePrice': '100', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK'},
-            {'DateTime': '20250102;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'SELL', 'Quantity': '-5', 'TradePrice': '110', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK'}
+            {'DateTime': '20250101;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'BUY', 'Quantity': '10', 'TradePrice': '100', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK', 'Description': 'Ericsson'},
+            {'DateTime': '20250102;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'SELL', 'Quantity': '-5', 'TradePrice': '110', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK', 'Description': 'Ericsson'}
         ]
-        process_input_data(data, stocks_data, k4_data, self.currency_rates)
+        process_input_data(data, stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', stocks_data)
         self.assertEqual(stocks_data['ERIC-B']['quantity'], 5)
         self.assertEqual(stocks_data['ERIC-B']['totalprice'], 5*100.5) # 502.5
@@ -439,11 +464,12 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_trading_data_001(self):
         stocks_data = {}
         k4_data = {}
+        statistics_data = []
         data = [
-            {'DateTime': '20250101;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'BUY', 'Quantity': '10', 'TradePrice': '100', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK'},
-            {'DateTime': '20250102;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'SELL', 'Quantity': '-5', 'TradePrice': '110', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK'}
+            {'DateTime': '20250101;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'BUY', 'Quantity': '10', 'TradePrice': '100', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK', 'Description': 'Ericsson'},
+            {'DateTime': '20250102;120000', 'Symbol': 'ERIC-B', 'Buy/Sell': 'SELL', 'Quantity': '-5', 'TradePrice': '110', 'IBCommission': '-5', 'CurrencyPrimary': 'SEK', 'Description': 'Ericsson'}
         ]
-        output = process_trading_data(data, stocks_data, k4_data, self.currency_rates)
+        output = process_trading_data(data, stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertEqual(len(output), 1)
         self.assertEqual(output[0]['beteckning'], 'ERIC-B')
         self.assertEqual(output[0]['antal'], 5)

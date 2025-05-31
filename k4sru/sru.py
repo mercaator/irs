@@ -251,15 +251,33 @@ def generate_sru_header(config):
                    )
     return file_header
 
-def clean_symbol(symbol):
+def generate_description(symbol, description, longnames):
     """Clean symbol by removing .SEK if present.
 
     Args:
         symbol: Symbol to clean
     """
-    return symbol[:-4] if symbol.endswith('.SEK') else symbol
+    # Handle currency pairs. Check if symbol contains a dot and a 3 letter currency code.
+    # E.g. USD.SEK, USD.EUR, EUR.USD.
+    if symbol.endswith('.SEK') or symbol.endswith('.USD') or symbol.endswith('.EUR'):
+        # Take only the base part of the symbol
+        base = symbol[:-4]
+        return base
+    else:
+        if longnames:
+            # If longnames is True, handle currency pair descriptions
+            if description.endswith('.SEK') or description.endswith('.USD') or description.endswith('.EUR'):
+                # Take only the base part of the description
+                base = description[:-4]
+                return base
+            else:
+                # Return the full description if it is not a currency pair
+                return description
+        else:
+            # If longnames is False, return only the symbol
+            return symbol
 
-def generate_row(number, codes, symbol, data):
+def generate_row(number, codes, symbol, description, data, longnames):
     """Generate a row of data for the SRU file.
 
     Args:
@@ -267,7 +285,7 @@ def generate_row(number, codes, symbol, data):
         data: Dictionary containing data for the stock
     """
     row = (f"#UPPGIFT {codes[number]['antal']} {data['antal']}\n"
-                  f"#UPPGIFT {codes[number]['beteckning']} {clean_symbol(symbol)}\n"
+                  f"#UPPGIFT {codes[number]['beteckning']} {generate_description(symbol, description, longnames)}\n"
                   f"#UPPGIFT {codes[number]['forsaljningspris']} {data['forsaljningspris']}\n"
                   f"#UPPGIFT {codes[number]['omkostnadsbelopp']} {data['omkostnadsbelopp']}\n")
     vinst = data['forsaljningspris'] - data['omkostnadsbelopp']
@@ -296,7 +314,7 @@ def generate_summary(codes, summa_forsaljningspris, summa_omkostnadsbelopp):
                     f"#UPPGIFT {codes['summa_forlust']} 0\n")
     return summary
 
-def generate_k4_blocks(k4_combined_transactions):
+def generate_k4_blocks(k4_combined_transactions, longnames):
     """Process K4 transactions into SRU file format.
 
     Args:
@@ -326,12 +344,13 @@ def generate_k4_blocks(k4_combined_transactions):
 
     for data in k4_combined_transactions:
         symbol = data['beteckning']
+        beskrivning = data['beskrivning']
         forsaljningspris = data['forsaljningspris']
         omkostnadsbelopp = data['omkostnadsbelopp']
         if symbol not in CURRENCY_CODES and not (' ' in symbol and any(c.isdigit() for c in symbol)) and symbol != "BTC": # Aktier
             k4_a_counter += 1
             logging.debug(f"Aktie: {symbol} row {k4_a_counter}")
-            k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, data)
+            k4_a_rows += generate_row(k4_a_counter, K4_FIELD_CODES_A, symbol, beskrivning, data, longnames)
             summa_forsaljningspris_a += forsaljningspris
             summa_omkostnadsbelopp_a += omkostnadsbelopp
 
@@ -346,7 +365,7 @@ def generate_k4_blocks(k4_combined_transactions):
         elif symbol not in CURRENCY_CODES: # Other (options, BTC, etc.)
             k4_d_counter += 1
             logging.debug(f"Övriga värdepapper: {symbol} row {k4_d_counter}")
-            k4_d_rows += generate_row(k4_d_counter, K4_FIELD_CODES_D, symbol, data)
+            k4_d_rows += generate_row(k4_d_counter, K4_FIELD_CODES_D, symbol, beskrivning, data, longnames)
             summa_forsaljningspris_d += forsaljningspris
             summa_omkostnadsbelopp_d += omkostnadsbelopp
 
@@ -361,7 +380,7 @@ def generate_k4_blocks(k4_combined_transactions):
         else: # Valuta
             k4_c_counter += 1
             logging.debug(f"Valuta: {symbol} row {k4_c_counter}")
-            k4_c_rows += generate_row(k4_c_counter, K4_FIELD_CODES_C, symbol, data)
+            k4_c_rows += generate_row(k4_c_counter, K4_FIELD_CODES_C, symbol, beskrivning, data, longnames)
             summa_forsaljningspris_c += forsaljningspris
             summa_omkostnadsbelopp_c += omkostnadsbelopp
 
@@ -430,7 +449,7 @@ def assemble_blocks(config, blocks_a, blocks_c, blocks_d):
     return file_content
 
 
-def generate_body(config, k4_combined_transactions):
+def generate_body(config, k4_combined_transactions, longnames):
     """Process K4 transactions into SRU file format.
 
     Args:
@@ -440,11 +459,11 @@ def generate_body(config, k4_combined_transactions):
         str: Formatted K4 data for SRU file
     """
     file_body = ""
-    blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions)
+    blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions, longnames)
     file_body += assemble_blocks(config, blocks_a, blocks_c, blocks_d)
     return file_body
 
-def generate_blanketter_sru(config, k4_combined_transactions):
+def generate_blanketter_sru(config, k4_combined_transactions, longnames):
     """Generate BLANKETTER.SRU file from K4 trading data.
 
     Args:
@@ -453,7 +472,7 @@ def generate_blanketter_sru(config, k4_combined_transactions):
     """
     # Initialize file_content first
     file_content = ""
-    file_body = generate_body(config, k4_combined_transactions)
+    file_body = generate_body(config, k4_combined_transactions, longnames)
     file_content += file_body
     file_content += "#FIL_SLUT\n"
 

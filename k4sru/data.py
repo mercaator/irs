@@ -23,9 +23,9 @@ from .sru import CURRENCY_CODES, OUTPUT_DIR
 # Base currency for all calculations
 BASE_CURRENCY = "SEK"
 
-def update_statistics_data(statistics_data, date, symbol, profit_loss):
+def update_statistics_data(statistics_data, date, symbol, description, profit_loss):
     # Statistics data is a list of tuples with date, symbol, and profit/loss
-    tuple = (date, symbol, profit_loss)
+    tuple = (date, symbol, description, profit_loss)
     statistics_data.append(tuple)
 
 def get_currency_rate(date, currency, currency_rates):
@@ -47,7 +47,7 @@ def get_currency_rate(date, currency, currency_rates):
         logging.error("Currency rate not found for %s on %s", currency, short_date)
         sys.exit(1)
 
-def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data):
+def process_k4_entry(symbol, description, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data):
     """Process a sell transaction for K4 tax reporting.
 
     Args:
@@ -59,21 +59,22 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
         currency: Currency of the transaction
         date: Date of the transaction
     """
-    logging.info("    ==> Processing k4 entry: %s, %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, avg_price, currency, date)
+    logging.info("    ==> Processing k4 entry: %s (%s), %s, %s, %s, %s, %s, %s", symbol, description, quantity, trade_price, commission, avg_price, currency, date)
     if currency == BASE_CURRENCY:
         if symbol not in k4_data:
             k4_data[symbol] = {
                 'beteckning': symbol,
+                'beskrivning': description,
                 'antal': -quantity,
                 'forsaljningspris': -quantity * trade_price - commission,
                 'omkostnadsbelopp': -quantity * avg_price
             }
-            update_statistics_data(statistics_data, date, symbol, (-quantity * trade_price - commission) - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) - (-quantity * avg_price))
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += -quantity * trade_price - commission
             k4_data[symbol]['omkostnadsbelopp'] += -quantity * avg_price
-            update_statistics_data(statistics_data, date, symbol, (-quantity * trade_price - commission) - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) - (-quantity * avg_price))
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) - (-quantity * avg_price))
     else:
@@ -81,16 +82,17 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
         if symbol not in k4_data:
             k4_data[symbol] = {
                 'beteckning': symbol,
+                'beskrivning': description,
                 'antal': -quantity,
                 'forsaljningspris': (-quantity * trade_price - commission) * currency_rate,
                 'omkostnadsbelopp': (-quantity * avg_price)
             }
-            update_statistics_data(statistics_data, date, symbol, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price - commission) * currency_rate
             k4_data[symbol]['omkostnadsbelopp'] += (-quantity * avg_price)
-            update_statistics_data(statistics_data, date, symbol, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
 
@@ -131,7 +133,7 @@ def process_currency_sell(currency, amount, stocks_data):
         stocks_data[currency]['totalprice'] += -amount * stocks_data[currency]['avgprice']
 
 
-def process_buy_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
+def process_buy_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
     """Process a buy transaction.
 
     Args:
@@ -142,7 +144,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date,
         currency: Currency of the transaction
         date: Date of the transaction
     """
-    logging.debug("Processing buy entry: %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, currency, date)
+    logging.debug("Processing buy entry: %s (%s), %s, %s, %s, %s, %s", symbol, description, quantity, trade_price, commission, currency, date)
 
     if currency == BASE_CURRENCY:
         # UC-1. Buy stock in base currency e.g. buy ERIC-B for SEK
@@ -198,6 +200,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date,
         # Sell currency e.g. USD
         process_k4_entry(
             symbol=currency,
+            description=currency,
             quantity= -(quantity*trade_price+commission),
             trade_price=currency_rate,
             commission=0, # FOREX fee for automatic currency exchange included in IBCommission
@@ -240,7 +243,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date,
     logging.debug("   Liquidity (USD): %.2f -- USD/SEK: %.2f", liquidity_usd, usd_sek)
     logging.debug("   Liquidity (EUR): %.2f -- EUR/SEK: %.2f", liquidity_eur, eur_sek)
 
-def process_sell_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
+def process_sell_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
     """Process a sell transaction.
 
     Args:
@@ -251,7 +254,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         currency: Currency of the transaction
         date: Date of the transaction
     """
-    logging.debug("Processing sell entry: %s, %s, %s, %s, %s, %s", symbol, quantity, trade_price, commission, currency, date)
+    logging.debug("Processing sell entry: %s (%s), %s, %s, %s, %s, %s", symbol, description, quantity, trade_price, commission, currency, date)
     if '.' in symbol:
         base = symbol.split('.')[0]
         quote = symbol.split('.')[1]
@@ -303,6 +306,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
     process_k4_entry(
         symbol=base,
+        description=description,
         quantity=quantity,
         trade_price=trade_price,
         commission=commission,
@@ -355,15 +359,16 @@ def process_input_data(data, stocks_data, k4_data, currency_rates, statistics_da
     for entry in data:
         date = entry['DateTime']
         symbol = entry['Symbol']
+        description = entry['Description']
         quantity = float(entry['Quantity'])
         trade_price = float(entry['TradePrice'])
         commission = -float(entry['IBCommission']) # Input is negative in IBKR CSV file
         currency = entry['CurrencyPrimary']
 
         if entry['Buy/Sell'] == 'BUY':
-            process_buy_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data)
+            process_buy_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data)
         elif entry['Buy/Sell'] == 'SELL':
-            process_sell_entry(symbol, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data)
+            process_sell_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data)
 
 def process_trading_data(data, stocks_data, k4_data, currency_rates, statistics_data):
     """Process the trading data for K4 tax reporting.
@@ -468,6 +473,7 @@ def post_process_trading_data(combined_trades):
         post_processed_data = {}
         post_processed_data['antal'] = round(float(trade['antal']))
         post_processed_data['beteckning'] = trade['beteckning']
+        post_processed_data['beskrivning'] = trade['beskrivning']
         post_processed_data['forsaljningspris'] = round(float(trade['forsaljningspris']))
         post_processed_data['omkostnadsbelopp'] = round(float(trade['omkostnadsbelopp']))
         output.append(post_processed_data)
@@ -571,6 +577,7 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
 
     # Combine and sort trades
     sorted_trades = sorted(trades, key=sort_key_combined)
+
     processed_data = process_trading_data(sorted_trades, stocks_data, k4_data, currency_rates, statistics_data)
 
     return post_process_trading_data(processed_data)

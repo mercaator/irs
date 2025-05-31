@@ -94,6 +94,8 @@ def create_cli_parser():
     parser.add_argument('--debug', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        default='INFO', help='Set the debug level')
     parser.add_argument('--year', default=2025, help='Year to process')
+    parser.add_argument('--longnames', action='store_true', default=False,
+                       help='Output long names in the generated K4 SRU file')
 
     return parser
 
@@ -115,13 +117,14 @@ def handle_k4(args):
     filepath_ibkr = args.get('indata_ibkr', INPUT_DIR + 'indata_ibkr.csv')
     filepath_bitstamp = args.get('indata_bitstamp', INPUT_DIR + 'indata_bitstamp.csv')
     year = args.get('year', 2024)
+    longnames = args.get('longnames', False)
     logging.debug("Starting to process parsed CSV data from Interactive Brokers")
     stocks_data = init_stocks_data(year)
     transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates, statistics_data)
     # Save the processed data to a JSON file
     save_stocks_data(year, stocks_data)
     save_statistics_data(year, statistics_data)
-    generate_blanketter_sru(config, transactions)
+    generate_blanketter_sru(config, transactions, longnames)
 
 if __name__ == '__main__':
     main()

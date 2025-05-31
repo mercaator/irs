@@ -16,6 +16,7 @@ import logging
 import sys
 import csv
 import json
+from datetime import datetime
 from pprint import pformat
 from .sru import CURRENCY_CODES, OUTPUT_DIR
 
@@ -26,6 +27,25 @@ def update_statistics_data(statistics_data, date, symbol, profit_loss):
     # Statistics data is a list of tuples with date, symbol, and profit/loss
     tuple = (date, symbol, profit_loss)
     statistics_data.append(tuple)
+
+def get_currency_rate(date, currency, currency_rates):
+    """Get the currency rate for a given date and currency.
+
+    Args:
+        date: Date in 'YYYYMMDD;HHMMSS' format
+        currency: Currency symbol (e.g., 'USD')
+        currency_rates: Dictionary of currency rates
+
+    Returns:
+        float: Currency rate for the given date and currency
+    """
+    short_date = date.split(';')[0]  # Ensure date is in the correct format
+    key = (short_date, currency)
+    if key in currency_rates:
+        return currency_rates[key]
+    else:
+        logging.error("Currency rate not found for %s on %s", currency, short_date)
+        sys.exit(1)
 
 def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data):
     """Process a sell transaction for K4 tax reporting.
@@ -57,7 +77,7 @@ def process_k4_entry(symbol, quantity, trade_price, commission, avg_price, curre
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) - (-quantity * avg_price))
     else:
-        currency_rate = currency_rates[(date, currency)] # USD.SEK rate
+        currency_rate = get_currency_rate(date, currency, currency_rates)
         if symbol not in k4_data:
             k4_data[symbol] = {
                 'beteckning': symbol,
@@ -172,8 +192,7 @@ def process_buy_entry(symbol, quantity, trade_price, commission, currency, date,
         if ' ' in base and any(c.isdigit() for c in base):
             logging.info(f"    buy entry {base} is an options contract")
 
-        currency_rate = currency_rates[(date, currency)] # <currency> / SEK rate
-
+        currency_rate = get_currency_rate(date, currency, currency_rates)
         logging.debug(f"   Action (1/2): Sell {currency} for {BASE_CURRENCY}")
 
         # Sell currency e.g. USD
@@ -272,7 +291,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
         # UC-8. Sell currency pair where quote currency in not SEK e.g. EUR/USD for USD
         #       Transactions: Sell EUR, Buy USD
 
-        currency_rate = currency_rates[(date, currency)] # USD.SEK rate
+        currency_rate = get_currency_rate(date, currency, currency_rates)
         logging.debug(f"   Action (1/2): Buy {currency} for {quote}")
         # Quantity is negative for sell entries, commission is turned positive in process_input_data.
         # Total amount of currency received is quantity * trade_price + commission e.g. -10 * 10 + 1 = -99
@@ -334,7 +353,7 @@ def process_sell_entry(symbol, quantity, trade_price, commission, currency, date
 
 def process_input_data(data, stocks_data, k4_data, currency_rates, statistics_data):
     for entry in data:
-        date = entry['DateTime'].split(';')[0]
+        date = entry['DateTime']
         symbol = entry['Symbol']
         quantity = float(entry['Quantity'])
         trade_price = float(entry['TradePrice'])
@@ -539,7 +558,7 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
     # Create a sorting key function that puts forex trades before stock trades on the same date
     # and puts BUY entries before SELL entries for options
     def sort_key_combined(trade):
-        date = trade['DateTime'].split(';')[0]
+        date = trade['DateTime']
         is_forex = 1 if '.' in trade['Symbol'] else 2
         if ' ' in trade['Symbol'] and any(c.isdigit() for c in trade['Symbol']):
             # For options, multiply the trade price by 100 as the quantity is in lots

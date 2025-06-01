@@ -384,6 +384,67 @@ def process_trading_data(data, stocks_data, k4_data, currency_rates, statistics_
     output = sorted(k4_data.values(), key=lambda x: x['beteckning'])
     return output
 
+def verify_input_fields(required_fields, data):
+    """Verify the input fields in the transaction data.
+
+    Args:
+        required_fields: List of required fields that should be present in each transaction entry
+        data: List of dictionaries containing transaction data
+
+    Returns:
+        bool: True if the data is valid, False otherwise
+    """
+    for entry in data:
+        missing = [field for field in required_fields if field not in entry]
+        if missing:
+            logging.error("Missing required fields in entry: %s", entry)
+            logging.error("Missing fields: %s", missing)
+            return False
+    return True
+
+def verify_input_data(lines):
+    """Verify the input data for Interactive Brokers transactions.
+
+    Args:
+        data: List of dictionaries containing transaction data
+
+    Returns:
+        bool: True if the data is valid, False otherwise
+    """
+
+    # Find where the currency rates section starts
+    try:
+        # Find the index where the currency rates section starts
+        # This is determined by the first line that has fewer fields than the first line
+        # of the trades section, which is assumed to be the longest line.
+        split_index = next(i for i, line in enumerate(lines) if len(line.strip().split(',')) < len(lines[0].strip().split(',')))
+    except StopIteration:
+        logging.error("No currency rates section found in the input data.")
+        sys.exit(1)
+
+    # Read trades
+    trades_reader = list(csv.DictReader(lines[:split_index]))
+
+    # Mandatory fields in the IBKR CSV file:
+    # "DateTime","Symbol","Buy/Sell","Quantity","TradePrice","IBCommission","CurrencyPrimary","Description","ISIN","Exchange"
+    # Not used fields: "ISIN", "Exchange"
+    required_fields = ['DateTime', 'Symbol', 'Buy/Sell', 'Quantity', 'TradePrice', 'IBCommission', 'CurrencyPrimary', 'Description', 'ISIN', 'Exchange']
+    if not verify_input_fields(required_fields, trades_reader):
+        logging.error("Trade data verification failed.")
+        sys.exit(1)
+
+    # Read currency rates
+    rates_reader = list(csv.DictReader(lines[split_index:]))
+
+    # Mandatory fields in the currency rates section:
+    # "Date/Time","FromCurrency","ToCurrency","Rate"
+    required_fields_rates = ['Date/Time', 'FromCurrency', 'ToCurrency', 'Rate']
+    if not verify_input_fields(required_fields_rates, rates_reader):
+        logging.error("Currency rates data verification failed.")
+        sys.exit(1)
+
+    return trades_reader, rates_reader
+
 def read_csv_ibkr(filename):
     """Read CSV file with Interactive Brokers transactions.
 
@@ -393,23 +454,12 @@ def read_csv_ibkr(filename):
     Returns:
         tuple: (stock_trades, forex_trades, currency_rates) where each is a list of dictionaries
     """
-    stock_trades = []
-    forex_trades = []
-    currency_rates = []
 
     with open(filename, 'r') as csvfile:
         lines = csvfile.readlines()
+        trades_reader, rates_reader = verify_input_data(lines)
 
-        # Find where the currency rates section starts
-        split_index = next(i for i, line in enumerate(lines) if len(line.strip().split(',')) < len(lines[0].strip().split(',')))
-
-        # Process trades
-        trades_reader = list(csv.DictReader(lines[:split_index]))
-
-        # Process currency rates
-        rates_reader = list(csv.DictReader(lines[split_index:]))
-
-    logging.debug(f"Processed {len(trades_reader)} stock trades, {len(rates_reader)} currency rates")
+    logging.info(f"{len(trades_reader)} stock trades and {len(rates_reader)} currency rates have been read from {filename}.")
     return trades_reader, rates_reader
 
 
@@ -460,7 +510,7 @@ def process_currency_rates(rates, currency_rates, year):
         if key not in currency_rates:
             currency_rates[key] = value
 
-    logging.info("==> Currency rates:\n%s", pformat(currency_rates, indent=4))
+    logging.debug("==> Currency rates:\n%s", pformat(currency_rates, indent=4))
 
 def post_process_trading_data(combined_trades):
     """Post-process the trading data for K4 tax reporting as the system handles only integer values.

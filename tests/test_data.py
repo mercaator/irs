@@ -96,15 +96,17 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_currency_sell_001(self):
         stocks_data = {}
         stocks_data['USD'] = {'quantity': 100, 'totalprice': 1000, 'avgprice': 10.0}
-        process_currency_sell('USD', 50, stocks_data)
+        process_currency_sell('USD', 50, 10.0, stocks_data)
         self.assertEqual(stocks_data['USD']['quantity'], 50)
         self.assertEqual(stocks_data['USD']['totalprice'], 500)
 
     def test_process_currency_sell_002(self):
         stocks_data = {}
-        with self.assertRaises(SystemExit) as cm:
-            process_currency_sell('USD', 50, stocks_data)
-        self.assertEqual(cm.exception.code, 1)
+        process_currency_sell('USD', 50, 10.0, stocks_data)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -50)
+        self.assertEqual(stocks_data['USD']['totalprice'], -500)
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0)
 
     def test_process_buy_entry_010(self):
         """UC-1. Buy stock in base currency e.g. buy ERIC-B for SEK
@@ -296,10 +298,14 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = {}
         k4_data = {}
         statistics_data = []
-        with self.assertRaises(SystemExit) as cm:
-            # TODO: Short selling not supported
-            process_sell_entry('ERIC-B', 'Ericsson', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
-        self.assertEqual(cm.exception.code, 1)
+        # Short selling
+        process_sell_entry('ERIC-B', 'Ericsson', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('ERIC-B', stocks_data)
+        self.assertEqual(stocks_data['ERIC-B']['quantity'], -5)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], (-5*110+5)) # -545
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], -545 / -5) # 109.0
+        # K4 event should be created when position is covered
+        self.assertNotIn('ERIC-B', k4_data)
 
     def test_process_sell_entry_012(self):
         """UC-5. Sell stock in base currency e.g. sell ERIC-B for SEK
@@ -309,12 +315,52 @@ class TestDataFunctions(unittest.TestCase):
         k4_data = {}
         statistics_data = []
         stocks_data['ERIC-B'] = {'quantity': 5, 'totalprice': 502.5, 'avgprice': 100.5}
-        # TODO: Short selling not supported
         process_sell_entry('ERIC-B', 'Ericsson', -10, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('ERIC-B', k4_data)
+        self.assertEqual(k4_data['ERIC-B']['antal'], 5)
+        # Since the transaction includes both a realized sale and the opening of a short position, and only one commission applies,
+        # the commission needs to be allocated proportionally to the sale and the short position.
+        self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 5*(110-0.5)) # 547.5
+        self.assertEqual(k4_data['ERIC-B']['omkostnadsbelopp'], 5*100.5) # 502.5
+
         self.assertEqual(stocks_data['ERIC-B']['quantity'], -5)
-        self.assertEqual(stocks_data['ERIC-B']['totalprice'], -502.5)
-        self.assertEqual(stocks_data['ERIC-B']['avgprice'], 100.5)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], -5*(110-0.5)) # -547.5
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], -547.5 / -5) # 109.5
+
+    def test_process_sell_entry_013(self):
+        """UC-5. Sell stock in base currency e.g. sell ERIC-B for SEK
+                 Transactions: Sell ERIC-B
+        """
+        stocks_data = {}
+        k4_data = {}
+        statistics_data = []
+        stocks_data['ERIC-B'] = {'quantity': 5, 'totalprice': 502.5, 'avgprice': 100.5}
+        process_sell_entry('ERIC-B', 'Ericsson', -20, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('ERIC-B', k4_data)
+        self.assertEqual(k4_data['ERIC-B']['antal'], 5)
+        self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 5*(110-0.25)) # 548.75
+        self.assertEqual(k4_data['ERIC-B']['omkostnadsbelopp'], 5*100.5) # 502.5
+
+        self.assertEqual(stocks_data['ERIC-B']['quantity'], -15)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], -15*(110-0.25)) # -1646.25
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], -1646.25 / -15) # 109.75
+
+    def test_process_sell_entry_014(self):
+        """UC-5. Sell stock in base currency e.g. sell ERIC-B for SEK
+                 Transactions: Sell ERIC-B
+        """
+        stocks_data = {}
+        k4_data = {}
+        statistics_data = []
+        stocks_data['ERIC-B'] = {'quantity': -5, 'totalprice': -502.5, 'avgprice': 100.5}
+        # Short selling
+        process_sell_entry('ERIC-B', 'Ericsson', -5, 110, 5, 'SEK', '2025-01-01', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('ERIC-B', stocks_data)
+        self.assertEqual(stocks_data['ERIC-B']['quantity'], -10)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], -502.5 + (-5*110+5)) # -1047.5
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], -1047.5 / -10) # 104.75
+        # K4 event should be created when position is covered
+        self.assertNotIn('ERIC-B', k4_data)
 
     def test_process_sell_entry_020(self):
         """UC-6. Sell currency pair where quote currency is SEK e.g. USD/SEK
@@ -341,10 +387,13 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = {}
         k4_data = {}
         statistics_data = []
-        with self.assertRaises(SystemExit) as cm:
-            # TODO: Short selling not supported
-            process_sell_entry('USD', '', -100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
-        self.assertEqual(cm.exception.code, 1)
+        process_sell_entry('USD', '', -100, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -100)
+        self.assertEqual(stocks_data['USD']['totalprice'], -100 * 10.0 + 1) # -999
+        self.assertEqual(stocks_data['USD']['avgprice'], 9.99)
+        # K4 event should be created when position is covered
+        self.assertNotIn('USD', k4_data)
 
     def test_process_sell_entry_022(self):
         """UC-6. Sell currency pair where quote currency is SEK e.g. USD/SEK
@@ -353,12 +402,27 @@ class TestDataFunctions(unittest.TestCase):
         stocks_data = {'USD': {'quantity': 100, 'totalprice': 900, 'avgprice': 9.0} }
         k4_data = {}
         statistics_data = []
-        # TODO: Short selling not supported
-        process_sell_entry('USD', '', -200, 10.0, 1, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        process_sell_entry('USD', '', -200, 10.0, 2, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
         self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 100)
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 100*(10.0-0.01)) # 999
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 100*9.0)
         self.assertEqual(stocks_data['USD']['quantity'], -100)
-        self.assertEqual(stocks_data['USD']['totalprice'], -900)
-        self.assertEqual(stocks_data['USD']['avgprice'], 9.0)
+        self.assertEqual(stocks_data['USD']['totalprice'], -100*(10.0-0.01)) # -999
+        self.assertEqual(stocks_data['USD']['avgprice'], -999 / -100)
+
+    def test_process_sell_entry_023(self):
+        """UC-6. Sell currency pair where quote currency is SEK e.g. USD/SEK
+                 Transactions: Sell USD
+        """
+        stocks_data = {'USD': {'quantity': -100, 'totalprice': -900, 'avgprice': 9.0} }
+        k4_data = {}
+        statistics_data = []
+        process_sell_entry('USD', '', -200, 10.0, 2, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertNotIn('USD', k4_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -300)
+        self.assertEqual(stocks_data['USD']['totalprice'], -900 - (200*10.0-2)) # -2898
+        self.assertEqual(stocks_data['USD']['avgprice'], -2898 / -300) # 9.66
 
     def test_process_sell_entry_030(self):
         """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
@@ -399,6 +463,118 @@ class TestDataFunctions(unittest.TestCase):
         self.assertEqual(k4_data['AAOI']['antal'], 5)
         self.assertEqual(k4_data['AAOI']['forsaljningspris'], (5*31-1)*10) # 154
         self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 5*301) # 502.5
+
+    def test_process_sell_entry_032(self):
+        """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
+                 Transactions: Sell AAOI, Buy USD
+        """
+        stocks_data = {'USD': {'quantity': -100, 'totalprice': -900, 'avgprice': 9.0},
+                       'AAOI': {'quantity': 10, 'totalprice': 3010, 'avgprice': 301} }
+        k4_data = {}
+        statistics_data = []
+        process_sell_entry('AAOI', 'Applied Optoelectronics Inc', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 1505) # 3010 - 5 * 301 = 1505
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 301)
+        self.assertEqual(stocks_data['USD']['quantity'], -100+5*31-1) # -100 + (5 * 31 - 1) = 54
+        self.assertEqual(stocks_data['USD']['totalprice'], 540) # 54 * 10 = 540
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0) # 540 / 54 = 10.0
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 5)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], (5*31-1)*10) # 154
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 5*301) # 502.5
+        self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 100)
+        # USD short position was opened at 9.0 USD/SEK exchange rate. So we got 900 SEK for 100 USD.
+        # When covering the short position, the dollar gets stronger, and at a rate of 10.0 USD/SEK,
+        # we need to pay 1000 SEK to cover the short position. Thus, we realize a loss of 100 SEK.
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 900) # 100 * 9.0
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 1000) # 100 * 10.0
+
+    def test_process_sell_entry_033(self):
+        """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
+                 Transactions: Sell AAOI, Buy USD
+        """
+        # Partial covering of a USD short position
+        stocks_data = {'USD': {'quantity': -200, 'totalprice': -1800, 'avgprice': 9.0},
+                       'AAOI': {'quantity': 10, 'totalprice': 3010, 'avgprice': 301} }
+        k4_data = {}
+        statistics_data = []
+        process_sell_entry('AAOI', 'Applied Optoelectronics Inc', -5, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 1505) # 3010 - 5 * 301 = 1505
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 301)
+        self.assertEqual(stocks_data['USD']['quantity'], -46) # -200 + (5 * 31 - 1) = -46
+        self.assertEqual(stocks_data['USD']['totalprice'], -414) # -46 * 9 = -414
+        self.assertEqual(stocks_data['USD']['avgprice'], 9.0) # -414 / -46 = 9.0
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 5)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], 1540) # (5 * 31 - 1)* 10 = 1540
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 1505) # 301 * 5 = 1505
+        self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 154) # 5 * 31 - 1 = 154
+        # USD short position was opened at 9.0 USD/SEK exchange rate. So we got 900 SEK for 100 USD.
+        # When covering the short position, the dollar gets stronger, and at a rate of 10.0 USD/SEK,
+        # we need to pay 1000 SEK to cover the short position. Thus, we realize a loss of 154 SEK.
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 1386) # 154 * 9.0 = 1386
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 1540) # 154 * 10.0 = 1540
+
+    def test_process_sell_entry_034(self):
+        """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
+                 Transactions: Sell AAOI, Buy USD
+        """
+        # Covering of a USD short position
+        # Opening a short position in AAOI
+        stocks_data = {'USD': {'quantity': -200, 'totalprice': -1800, 'avgprice': 9.0},
+                       'AAOI': {'quantity': 5, 'totalprice': 1505, 'avgprice': 301} }
+        k4_data = {}
+        statistics_data = []
+        process_sell_entry('AAOI', 'Applied Optoelectronics Inc', -10, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        # Since the transaction includes both a realized sale and the opening of a short position, and only one commission applies,
+        # the commission needs to be allocated proportionally to the sale and the short position.
+        self.assertEqual(stocks_data['AAOI']['quantity'], -5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], -1545) # -5 * (31-0.1) * 10.0 = -1545
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 309) # 1545 / 5 = 309
+        self.assertEqual(stocks_data['USD']['quantity'], 109) # -200 + (10 * 31 - 1) = 109
+        self.assertEqual(stocks_data['USD']['totalprice'], 1090) # 109 * 10.0 = 1090
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0) # 1090 / 109 = 10.0
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 5)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], 1545) # 5 * (31 - 0.1) * 10 = 1545
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 1505) # 301 * 5 = 1505
+        self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 200)
+        # USD short position was opened at 9.0 USD/SEK exchange rate. So we got 900 SEK for 100 USD.
+        # When covering the short position, the dollar gets stronger, and at a rate of 10.0 USD/SEK,
+        # we need to pay 1000 SEK to cover the short position. Thus, we realize a loss of 154 SEK.
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 1800) # 200 * 9.0 = 1800
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 2000) # 200 * 10.0 = 2000
+
+    def test_process_sell_entry_035(self):
+        """UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
+                 Transactions: Sell AAOI, Buy USD
+        """
+        # Covering of a USD short position
+        # Adding to short position in AAOI
+        stocks_data = {'USD': {'quantity': -200, 'totalprice': -1800, 'avgprice': 9.0},
+                       'AAOI': {'quantity': -5, 'totalprice': -1505, 'avgprice': 301} }
+        k4_data = {}
+        statistics_data = []
+        process_sell_entry('AAOI', 'Applied Optoelectronics Inc', -15, 31, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], -20)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], -6145) # -1505 - (15 * 31 - 1) * 10.0) = 6145
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 307.25) # 6145 / 20 = 307.25
+        self.assertEqual(stocks_data['USD']['quantity'], 264) # -200 + (15 * 31 - 1) = 264
+        self.assertEqual(stocks_data['USD']['totalprice'], 2640) # 264 * 10.0 = 2640
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0) # 2640 / 264 = 10.0
+        self.assertNotIn('AAOI', k4_data)
+        self.assertIn('USD', k4_data)
+        self.assertEqual(k4_data['USD']['antal'], 200)
+        # USD short position was opened at 9.0 USD/SEK exchange rate. So we got 900 SEK for 100 USD.
+        # When covering the short position, the dollar gets stronger, and at a rate of 10.0 USD/SEK,
+        # we need to pay 1000 SEK to cover the short position. Thus, we realize a loss of 154 SEK.
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 1800) # 200 * 9.0 = 1800
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 2000) # 200 * 10.0 = 2000
 
     def test_process_sell_entry_040(self):
         """UC-8. Sell currency pair where quote currency in not SEK e.g. EUR/USD for USD

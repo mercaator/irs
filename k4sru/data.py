@@ -111,12 +111,24 @@ def process_currency_buy(currency, amount, currency_rate, stocks_data):
             'totalprice': -amount * currency_rate,
             'avgprice': currency_rate
         }
-    else:
+    # This function is never called with a positive amount that would change a negative quantity to positive.
+    # Thus, we only handle the cases where the quantity is positive and stays positive or zero, or where the
+    # quantity is negative and stays negative or zero.
+    elif stocks_data[currency]['quantity'] >= 0:
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * currency_rate
         stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
+    else:
+        # Deferred tax event, margin account
+        logging.warning("      paying back %s %s, of total margin loan %s ", -amount, currency, stocks_data[currency]['quantity'])
+        stocks_data[currency]['quantity'] += -amount
+        stocks_data[currency]['totalprice'] += -amount * stocks_data[currency]['avgprice']
+        # Position closed, set average price to zero
+        if stocks_data[currency]['quantity'] == 0:
+            stocks_data[currency]['avgprice'] = 0.0
 
-def process_currency_sell(currency, amount, stocks_data):
+
+def process_currency_sell(currency, amount, currency_rate, stocks_data):
     """Process a currency transaction.
 
     Args:
@@ -125,12 +137,23 @@ def process_currency_sell(currency, amount, stocks_data):
         currency_rate: Exchange rate to SEK
     """
     if currency not in stocks_data:
-        logging.error("Error: No BUY entry found for SELL entry %s", currency)
-        sys.exit(1)
-    else:
+        logging.warning("Initial short selling of entry %s", currency)
+        stocks_data[currency] = {
+            'quantity': 0,
+            'totalprice': 0,
+            'avgprice': 0
+        }
+
+    if stocks_data[currency]['quantity'] > 0:
         logging.debug("      selling %s %s, %s/SEK = %s", -amount, currency, currency, stocks_data[currency]['avgprice'])
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * stocks_data[currency]['avgprice']
+    else:
+        logging.debug("      added margin loan %s %s, %s/SEK = %s", -amount, currency, currency, currency_rate)
+        # Update averge price on margin loan
+        stocks_data[currency]['quantity'] += -amount
+        stocks_data[currency]['totalprice'] += -amount * currency_rate
+        stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
 
 
 def process_buy_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
@@ -168,15 +191,60 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
         logging.debug(f"   Action (1/1): Buy {base} for {quote}")
 
         if base not in stocks_data:
+            # First buy entry for this stock
+            logging.debug("      first buy entry for %s", base)
             stocks_data[base] = {
                 'quantity': quantity,
                 'totalprice': quantity * trade_price + commission
             }
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
-        else:
+        elif stocks_data[base]['quantity'] >= 0:
+            # Normal case, long position
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * trade_price + commission
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+        elif stocks_data[base]['quantity'] + quantity >= 0:
+            # Cover margin loan with new buy entry
+            logging.debug("      covering %s %s, of total margin loan %s ", -(quantity * trade_price + commission), base, stocks_data[base]['quantity'])
+            credit = stocks_data[base]['quantity']  # negative value
+            surplus = credit + quantity
+
+            # TODO: might need an if else to handle currency and stock commissions separately
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity= credit,
+                trade_price=trade_price,
+                commission=0,  # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=stocks_data[base]['avgprice'],
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] = surplus
+            stocks_data[base]['totalprice'] = surplus * trade_price + commission
+            stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+        else:
+            # Cover part of margin loan with new buy entry
+            logging.debug("      covering (partial) %s %s, of total margin loan %s ", -(quantity * trade_price + commission), base, stocks_data[base]['quantity'])
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity= -quantity,
+                trade_price=trade_price,
+                commission=0,  # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=stocks_data[base]['avgprice'],
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] += quantity
+            stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
+
     else:
         # UC-3. Buy stock in foreign currency e.g. buy AAOI for USD
         #       Transactions: Buy AAOI, Sell USD
@@ -197,34 +265,109 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
         currency_rate = get_currency_rate(date, currency, currency_rates)
         logging.debug(f"   Action (1/2): Sell {currency} for {BASE_CURRENCY}")
 
-        # Sell currency e.g. USD
-        process_k4_entry(
-            symbol=currency,
-            description=currency,
-            quantity= -(quantity*trade_price+commission),
-            trade_price=currency_rate,
-            commission=0, # FOREX fee for automatic currency exchange included in IBCommission
-            avg_price=stocks_data[currency]['avgprice'],
-            currency=BASE_CURRENCY,
-            date=date,
-            k4_data=k4_data,
-            currency_rates=currency_rates,
-            statistics_data=statistics_data
-        )
-        process_currency_sell(currency, quantity*trade_price+commission, stocks_data)
+        if stocks_data[currency]['quantity'] - (quantity * trade_price + commission) >= 0:
+            # Sell currency e.g. USD
+            process_k4_entry(
+                symbol=currency,
+                description=currency,
+                quantity= -(quantity*trade_price+commission),
+                trade_price=currency_rate,
+                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=stocks_data[currency]['avgprice'],
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            process_currency_sell(currency, quantity*trade_price+commission, currency_rate, stocks_data)
+        elif stocks_data[currency]['quantity'] >= 0:
+            logging.warning("      (new margin loan) selling %s %s, but only %s available ", quantity*trade_price+commission, currency, stocks_data[currency]['quantity'])
+            # Sell currency e.g. USD
+            total_balance = stocks_data[currency]['quantity']
+            credit = (quantity * trade_price + commission) - total_balance
+            process_currency_sell(currency, total_balance, currency_rate, stocks_data)
+            process_k4_entry(
+                symbol=currency,
+                description=currency,
+                quantity= -total_balance,
+                trade_price=currency_rate,
+                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=stocks_data[currency]['avgprice'],
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            currency_rate = get_currency_rate(date, currency, currency_rates)
+            # Split the sell processing into two parts, first update the stocks_data with the total balance
+            # and then process the credit amount separately.
+            # This is to handle the case where the total balance is less than the amount to be sold.
+            process_currency_sell(currency, credit, currency_rate, stocks_data)
+        else:
+            logging.warning("      (margin loan add) new margin loan %s %s, added to existing loan %s ", quantity*trade_price+commission, currency, stocks_data[currency]['quantity'])
+            process_currency_sell(currency, quantity * trade_price + commission, currency_rate, stocks_data)
 
 
         logging.debug(f"   Action (2/2): Buy {base} for {quote}")
+
         if base not in stocks_data:
+            logging.debug("      first buy entry for %s", base)
             stocks_data[base] = {
                 'quantity': quantity,
                 'totalprice': (quantity * trade_price + commission) * currency_rate
             }
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
-        else:
+        elif stocks_data[base]['quantity'] >= 0:
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += (quantity * trade_price + commission) * currency_rate
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+        elif stocks_data[base]['quantity'] + quantity >= 0:
+            # Cover margin loan with new buy entry
+            logging.debug("      covering %s %s, of total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
+            credit = stocks_data[base]['quantity'] # negative value
+            surplus = credit + quantity
+            # TODO check commission handling
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity= credit,
+                trade_price=trade_price,
+                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=stocks_data[base]['avgprice'],
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] = surplus
+            stocks_data[base]['totalprice'] = surplus * trade_price + commission
+            if stocks_data[base]['quantity'] == 0:
+                stocks_data[base]['avgprice'] = 0
+            else:
+                stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+        else:
+            # Cover part of margin loan with new buy entry
+            logging.debug("      covering (partial) %s %s, of total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity= -quantity,
+                trade_price=trade_price,
+                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=stocks_data[base]['avgprice'],
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] += quantity
+            stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
+
+
 
     logging.debug("   Buy entry processed for %s [currency: %s]", symbol, currency)
     logging.debug("   Updated stock data for %s: %s", base, stocks_data[base])
@@ -261,7 +404,7 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
     else:
         base = symbol
         quote = BASE_CURRENCY
-
+    #logging.debug(f'   Split symbol into base: {base} and quote: {quote}')
     if base not in stocks_data:
         if ' ' in base and any(c.isdigit() for c in base):
             logging.info(f"    sell entry {base} is an options contract")
@@ -271,9 +414,13 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 'avgprice': 0
             }
         else:
-            logging.debug(f"stocks_data: {stocks_data}")
-            logging.error(f"Error: No BUY entry found for SELL entry {base}")
-            sys.exit(1)
+            logging.warning(f"    First sell entry for {base}, initializing stocks_data")
+            stocks_data[base] = {
+                'quantity': 0,
+                'totalprice': 0,
+                'avgprice': 0
+            }
+
 
     if currency == BASE_CURRENCY:
         # UC-5. Sell stock in base currency e.g. sell ERIC-B for SEK
@@ -282,12 +429,61 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
         #       Transactions: Sell USD
 
         logging.debug(f"   Action (1/1): Sell {base} for {quote}")
-        if stocks_data[base]['quantity'] + quantity < 0:
-            # TODO: Implement short selling
-            logging.warning("      Trying to sell %s %s, but only %s available ", -quantity, base, stocks_data[base]['quantity'])
+        if stocks_data[base]['quantity'] + quantity >= 0:
+            # Normal case, selling shares from long position
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity=quantity,
+                trade_price=trade_price,
+                commission=commission,
+                avg_price=stocks_data[base]['avgprice'],
+                currency=currency,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] += quantity
+            if stocks_data[base]['quantity'] == 0:
+                stocks_data[base]['totalprice'] = 0
+                stocks_data[base]['avgprice'] = 0
+            else:
+                stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ commission
 
-        stocks_data[base]['quantity'] += quantity
-        stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ commission
+        elif stocks_data[base]['quantity'] > 0:
+            # New margin loan, selling more shares than available
+            logging.warning("      (new margin loan) selling %s %s, but only %s available ", -quantity, base, stocks_data[base]['quantity'])
+            total_balance = stocks_data[base]['quantity']
+            credit = total_balance + quantity
+            # Since the transaction includes both a realized sale and the opening of a short position, and only one commission applies,
+            # the commission needs to be allocated proportionally to the sale and the short position.
+            commission_per_share = commission / -quantity # negative quantity for sell
+            unit_price = trade_price - commission_per_share
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity= -total_balance,
+                trade_price=unit_price,
+                commission=0,
+                avg_price=stocks_data[base]['avgprice'],
+                currency=currency,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            # Credit cannot be negative at this point, so we don't need to check for that.
+            stocks_data[base]['quantity'] = credit
+            stocks_data[base]['totalprice'] = credit * unit_price
+            stocks_data[base]['avgprice'] = unit_price
+        else:
+            # Add to margin loan, selling more shares than available
+            logging.debug("      (margin loan add) new margin loan %s %s, added to existing loan %s ", -quantity, base, stocks_data[base]['quantity'])
+            stocks_data[base]['quantity'] += quantity
+            stocks_data[base]['totalprice'] += quantity * trade_price + commission
+            stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+
     else:
         # UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
         #       Transactions: Sell AAOI, Buy USD
@@ -296,27 +492,111 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
 
         currency_rate = get_currency_rate(date, currency, currency_rates)
         logging.debug(f"   Action (1/2): Buy {currency} for {quote}")
-        # Quantity is negative for sell entries, commission is turned positive in process_input_data.
-        # Total amount of currency received is quantity * trade_price + commission e.g. -10 * 10 + 1 = -99
-        process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
+        if currency not in stocks_data:
+            logging.debug("      first buy entry for %s", base)
+            stocks_data[currency] = {
+                'quantity': 0,
+                'totalprice': 0,
+                'avgprice': 0
+            }
+
+        if stocks_data[currency]['quantity'] >= 0:
+            # Quantity is negative for sell entries, commission is turned positive in process_input_data.
+            # Total amount of currency received is quantity * trade_price + commission e.g. -10 * 10 + 1 = -99
+            process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
+        elif stocks_data[currency]['quantity'] + (-quantity * trade_price - commission) >= 0:
+            logging.debug("      paying back %s %s, of total margin loan %s %s", -(quantity * trade_price + commission), currency, stocks_data[currency]['quantity'], currency)
+            credit = stocks_data[currency]['quantity'] # negative value
+            surplus = credit + -(quantity * trade_price + commission)
+            process_k4_entry(
+                symbol=currency,
+                description=currency,
+                quantity=credit,
+                trade_price=stocks_data[currency]['avgprice'], # When covering the sell price is the average price
+                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=currency_rate, # When covering the average price is the currency rate
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            process_currency_buy(currency, credit, currency_rate, stocks_data)
+            # Function expects a negative amount to be processed
+            process_currency_buy(currency, -surplus, currency_rate, stocks_data)
+        else:
+            logging.debug("      covering (partial) %s %s, of total margin loan %s %s", -(quantity * trade_price + commission), currency, stocks_data[currency]['quantity'], currency)
+            cover_amount = (quantity * trade_price + commission) # Keep the amount negative for processing
+            process_k4_entry(
+                symbol=currency,
+                description=currency,
+                quantity=cover_amount,
+                trade_price=stocks_data[currency]['avgprice'], # When covering the sell price is the average price
+                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                avg_price=currency_rate, # When covering the average price is the currency rate
+                currency=BASE_CURRENCY,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            # Function expects a negative amount to be processed
+            process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
 
         logging.debug(f"   Action (2/2): Sell {base} for {quote}")
-        stocks_data[base]['quantity'] += quantity
-        stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ (commission * currency_rate)
 
-    process_k4_entry(
-        symbol=base,
-        description=description,
-        quantity=quantity,
-        trade_price=trade_price,
-        commission=commission,
-        avg_price=stocks_data[base]['avgprice'],
-        currency=currency,
-        date=date,
-        k4_data=k4_data,
-        currency_rates=currency_rates,
-        statistics_data=statistics_data
-    )
+        if stocks_data[base]['quantity'] + quantity >= 0:
+            # Normal case, selling shares from long position
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity=quantity,
+                trade_price=trade_price,
+                commission=commission,
+                avg_price=stocks_data[base]['avgprice'],
+                currency=currency,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] += quantity
+            if stocks_data[base]['quantity'] == 0:
+                stocks_data[base]['totalprice'] = 0
+                stocks_data[base]['avgprice'] = 0
+            else:
+                stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ (commission * currency_rate)
+        elif stocks_data[base]['quantity'] > 0:
+            # New margin loan, selling more shares than available
+            logging.warning("      (new margin loan) selling %s %s, but only %s available ", -quantity, base, stocks_data[base]['quantity'])
+            total_balance = stocks_data[base]['quantity']
+            credit = total_balance + quantity
+            # Since the transaction includes both a realized sale and the opening of a short position, and only one commission applies,
+            # the commission needs to be allocated proportionally to the sale and the short position.
+            commission_per_share = commission / -quantity # negative quantity for sell
+            unit_price = trade_price - commission_per_share
+            process_k4_entry(
+                symbol=base,
+                description=description,
+                quantity= -total_balance,
+                trade_price=unit_price,
+                commission=0, # Commission in included in the trade price TODO: Does this function need a commission?
+                avg_price=stocks_data[base]['avgprice'],
+                currency=currency,
+                date=date,
+                k4_data=k4_data,
+                currency_rates=currency_rates,
+                statistics_data=statistics_data
+            )
+            stocks_data[base]['quantity'] = credit
+            stocks_data[base]['totalprice'] = credit * unit_price * currency_rate
+            stocks_data[base]['avgprice'] = unit_price * currency_rate
+        else:
+            # Add to margin loan, selling more shares than available
+            logging.debug("      (margin loan add) new margin loan %s %s, added to existing loan %s ", -quantity, base, stocks_data[base]['quantity'])
+            stocks_data[base]['quantity'] += quantity
+            stocks_data[base]['totalprice'] += (quantity * trade_price + commission) * currency_rate
+            stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
 
     # Handle fractional "shares" (satoshis) of BTC as most probably fees cause final quantity to be more than 0.0001
     # that was set to handle float errors with fractional shares.
@@ -329,13 +609,15 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
         else:
             logging.info("Sell entry processed for %s with satoshis, totalprice not zero: %s", base, stocks_data[base]['totalprice'])
 
-    if abs(stocks_data[base]['quantity']) < 0.0001:  # handle float error with fractional shares
+    if 0 < abs(stocks_data[base]['quantity']) < 0.0001:  # handle float error with fractional shares
+        logging.debug("   Rounding error when processing %s, quantity: %s", base, stocks_data[base]['quantity'])
         stocks_data[base]['quantity'] = 0
         stocks_data[base]['avgprice'] = 0
-        if stocks_data[base]['totalprice'] < 0.0001:
+        if 0 < abs(stocks_data[base]['totalprice']) < 0.0001:
+            logging.debug("   Rounding error when processing %s, totalprice: %s", base, stocks_data[base]['totalprice'])
             stocks_data[base]['totalprice'] = 0
-        else:
-            logging.info("Sell entry processed for %s with fractional shares, totalprice not zero: %s", base, stocks_data[base]['totalprice'])
+        #else:
+        #    logging.error("Sell entry processed for %s with fractional shares, totalprice not zero: %s", base, stocks_data[base]['totalprice'])
 
     logging.debug("   Sell entry processed for %s [currency: %s]", symbol, currency)
     logging.debug("   Updated stock data for %s: %s", base, stocks_data[base])
@@ -591,7 +873,7 @@ def save_statistics_data(year, statistics_data):
     logging.debug("Saving statistics data: %s", statistics_data)
     with open(f'{OUTPUT_DIR}output_statistics_{year}.csv', 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Date', 'Symbol', 'Profit/Loss'])
+        writer.writerow(['Date', 'Symbol', 'Description', 'Profit/Loss'])
         writer.writerows(statistics_data)
     logging.info(f"Saved statistics data for {year}")
 

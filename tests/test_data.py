@@ -136,6 +136,65 @@ class TestDataFunctions(unittest.TestCase):
         self.assertEqual(stocks_data['ERIC-B']['totalprice'], 10*100+5+800) # 1805
         self.assertEqual(stocks_data['ERIC-B']['avgprice'], 90.25)
 
+    def test_process_buy_entry_012(self):
+        """UC-1. Buy stock in base currency e.g. buy ERIC-B for SEK
+                 Transactions: Buy ERIC-B
+                 short position, normal buy, cover all
+        """
+        stocks_data = {'ERIC-B': {'quantity': -5, 'totalprice': -400, 'avgprice': 80}}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('ERIC-B', 'Ericsson', 10, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('ERIC-B', k4_data)
+        self.assertEqual(k4_data['ERIC-B']['antal'], 5)
+        # Since the transaction includes both a covering of a short position and the opening of a long position, and only one commission applies,
+        # the commission needs to be allocated proportionally to the covering and the long position.
+        self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 400) # 5 * 80 = 400
+        self.assertEqual(k4_data['ERIC-B']['omkostnadsbelopp'], 502.5) # 5 * (100 + 0.5) = 502.5
+        self.assertIn('ERIC-B', stocks_data)
+        self.assertEqual(stocks_data['ERIC-B']['quantity'], 5)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], 502.5) # 10 * (100 + 0.5) = 502.5
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], 100.5)
+
+    def test_process_buy_entry_013(self):
+        """UC-1. Buy stock in base currency e.g. buy ERIC-B for SEK
+                 Transactions: Buy ERIC-B
+                 short position, normal buy, cover partial
+        """
+        stocks_data = {'ERIC-B': {'quantity': -10, 'totalprice': -800, 'avgprice': 80}}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('ERIC-B', 'Ericsson', 5, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('ERIC-B', k4_data)
+        self.assertEqual(k4_data['ERIC-B']['antal'], 5)
+        self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 400) # 5 * 80 = 400
+        self.assertEqual(k4_data['ERIC-B']['omkostnadsbelopp'], 505) # 5 * 100 + 5 = 505
+        self.assertIn('ERIC-B', stocks_data)
+        self.assertEqual(stocks_data['ERIC-B']['quantity'], -5)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], -400) # -800 + 5 * 80 = -400
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], 80)
+
+    def test_process_buy_entry_014(self):
+        """UC-1. Buy stock in base currency e.g. buy ERIC-B for SEK
+                 Transactions: Buy ERIC-B
+                 short position, normal buy, cover (quantity=0)
+        """
+        stocks_data = {'ERIC-B': {'quantity': -5, 'totalprice': -400, 'avgprice': 80}}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('ERIC-B', 'Ericsson', 5, 100, 5, 'SEK', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('ERIC-B', k4_data)
+        self.assertEqual(k4_data['ERIC-B']['antal'], 5)
+        self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 400) # 5 * 80 = 400
+        self.assertEqual(k4_data['ERIC-B']['omkostnadsbelopp'], 505) # 5 * 100 + 5 = 505
+        self.assertIn('ERIC-B', stocks_data)
+        self.assertEqual(stocks_data['ERIC-B']['quantity'], 0)
+        self.assertEqual(stocks_data['ERIC-B']['totalprice'], 0)
+        self.assertEqual(stocks_data['ERIC-B']['avgprice'], 0)
+
     def test_process_buy_entry_020(self):
         """UC-2. Buy currency pair where quote currency is SEK e.g. USD/SEK
                  Transactions: Buy USD
@@ -228,6 +287,96 @@ class TestDataFunctions(unittest.TestCase):
         self.assertEqual(stocks_data['USD']['quantity'], 500 - 28.29) # 471.71
         self.assertEqual(stocks_data['USD']['totalprice'], 4500 - 28.29*9.0) # 4500 - 254.61 = 4245.39
         self.assertEqual(stocks_data['USD']['avgprice'], 9.0)
+
+    def test_process_buy_entry_033(self):
+        """UC-3. Buy stock in foreign currency e.g. buy AAOI for USD
+                 Transactions: Buy AAOI, Sell USD
+                 USD long, stock short, stock cover all, new USD short
+        """
+        stocks_data = { 'USD': {'quantity': 200, 'totalprice': 1800, 'avgprice': 9.0},
+                        'AAOI': {'quantity': -5, 'totalprice': -1125, 'avgprice': 225}}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('AAOI', 'Applied Optoelectronics Inc', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('USD', k4_data)
+        # Since the transaction includes both a covering of a short position and the opening of a long position, and only one commission applies,
+        # the commission needs to be allocated proportionally to the covering and the long position.
+        self.assertEqual(k4_data['USD']['antal'], 200)
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 2000) # 200 * 10 = 2000
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 1800) # 200 * 9 = 1800
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 5)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], 1125) # 5 * 225 = 1125
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 1505) # 5 * (30+0.1)* 10 = 1505
+
+        self.assertIn('AAOI', stocks_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 1505) # 5 * (30+0.1) * 10
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 301) # 1505 / 5 = 301
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -101) # 200 - (10 * 30 + 1) = -101
+        self.assertEqual(stocks_data['USD']['totalprice'], -1010) # -101 * 10 = -1010
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0)
+
+    def test_process_buy_entry_034(self):
+        """UC-3. Buy stock in foreign currency e.g. buy AAOI for USD
+                 Transactions: Buy AAOI, Sell USD
+                 USD long, stock short, stock cover partial, new USD short
+        """
+        stocks_data = { 'USD': {'quantity': 200, 'totalprice': 1800, 'avgprice': 9.0},
+                        'AAOI': {'quantity': -15, 'totalprice': -3375, 'avgprice': 225}}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('AAOI', 'Applied Optoelectronics Inc', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertIn('USD', k4_data)
+        # Since the transaction includes both a covering of a short position and the opening of a long position, and only one commission applies,
+        # the commission needs to be allocated proportionally to the covering and the long position.
+        self.assertEqual(k4_data['USD']['antal'], 200)
+        self.assertEqual(k4_data['USD']['forsaljningspris'], 2000) # 200 * 10 = 2000
+        self.assertEqual(k4_data['USD']['omkostnadsbelopp'], 1800) # 200 * 9 = 1800
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 10)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], 2250) # 10 * 225 = 2250
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 3010) # 10 * (30+0.1)* 10 = 3010
+
+        self.assertIn('AAOI', stocks_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], -5)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], -1125) # -3375 + 10 * 225 = -1125
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 225) # 1505 / 5 = 301
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -101) # 200 - (10 * 30 + 1) = -101
+        self.assertEqual(stocks_data['USD']['totalprice'], -1010) # -101 * 10 = -1010
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0)
+
+    def test_process_buy_entry_035(self):
+        """UC-3. Buy stock in foreign currency e.g. buy AAOI for USD
+                 Transactions: Buy AAOI, Sell USD
+                 USD short, stock short, stock cover, USD short add
+        """
+        stocks_data = { 'USD': {'quantity': -200, 'totalprice': -1800, 'avgprice': 9.0},
+                        'AAOI': {'quantity': -10, 'totalprice': -2250, 'avgprice': 225}}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('AAOI', 'Applied Optoelectronics Inc', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertNotIn('USD', k4_data)
+        self.assertIn('AAOI', k4_data)
+        self.assertEqual(k4_data['AAOI']['antal'], 10)
+        self.assertEqual(k4_data['AAOI']['forsaljningspris'], 2250) # 10 * 225 = 2250
+        self.assertEqual(k4_data['AAOI']['omkostnadsbelopp'], 3010) # 10 * (30+0.1)* 10 = 3010
+
+        self.assertIn('AAOI', stocks_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 0)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 0)
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 0)
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -501) # -200 - (10 * 30 + 1) = -501
+        self.assertEqual(stocks_data['USD']['totalprice'], -4810) # -1800 - (301 * 10) = -4810
+        self.assertEqual(stocks_data['USD']['avgprice'], 4810 / 501) # 4810 / 501 = 9.60
+
+
 
     def test_process_buy_entry_040(self):
         """UC-4. Buy currency pair where quote currency in not SEK e.g. EUR/USD for USD

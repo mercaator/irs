@@ -205,18 +205,22 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
         elif stocks_data[base]['quantity'] + quantity >= 0:
             # Cover margin loan with new buy entry
-            logging.debug("      covering %s %s, of total margin loan %s ", -(quantity * trade_price + commission), base, stocks_data[base]['quantity'])
+            logging.debug("      buying (covering) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
             credit = stocks_data[base]['quantity']  # negative value
             surplus = credit + quantity
+            # Since the transaction includes both a covering of a short and the opening of a long position, and only one commission applies,
+            # the commission needs to be allocated proportionally to the covering and the long position.
+            commission_per_share = commission / quantity
+            unit_price = trade_price + commission_per_share
 
             # TODO: might need an if else to handle currency and stock commissions separately
             process_k4_entry(
                 symbol=base,
                 description=description,
                 quantity= credit,
-                trade_price=trade_price,
-                commission=0,  # FOREX fee for automatic currency exchange included in IBCommission
-                avg_price=stocks_data[base]['avgprice'],
+                trade_price=stocks_data[base]['avgprice'],
+                commission=0,
+                avg_price=unit_price,
                 currency=BASE_CURRENCY,
                 date=date,
                 k4_data=k4_data,
@@ -224,18 +228,24 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 statistics_data=statistics_data
             )
             stocks_data[base]['quantity'] = surplus
-            stocks_data[base]['totalprice'] = surplus * trade_price + commission
-            stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+            if surplus == 0:
+                stocks_data[base]['totalprice'] = 0
+                stocks_data[base]['avgprice'] = 0
+            else:
+                stocks_data[base]['totalprice'] = surplus * unit_price
+                stocks_data[base]['avgprice'] = unit_price
         else:
             # Cover part of margin loan with new buy entry
-            logging.debug("      covering (partial) %s %s, of total margin loan %s ", -(quantity * trade_price + commission), base, stocks_data[base]['quantity'])
+            logging.debug("      buying (covering partial) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
+            commission_per_share = commission / quantity
+            unit_price = trade_price + commission_per_share
             process_k4_entry(
                 symbol=base,
                 description=description,
                 quantity= -quantity,
-                trade_price=trade_price,
-                commission=0,  # FOREX fee for automatic currency exchange included in IBCommission
-                avg_price=stocks_data[base]['avgprice'],
+                trade_price=stocks_data[base]['avgprice'],
+                commission=0, # Added to unit_price
+                avg_price=unit_price,
                 currency=BASE_CURRENCY,
                 date=date,
                 k4_data=k4_data,
@@ -282,7 +292,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             )
             process_currency_sell(currency, quantity*trade_price+commission, currency_rate, stocks_data)
         elif stocks_data[currency]['quantity'] >= 0:
-            logging.warning("      (new margin loan) selling %s %s, but only %s available ", quantity*trade_price+commission, currency, stocks_data[currency]['quantity'])
+            logging.warning("      (margin loan new) selling %s %s, but only %s available ", quantity*trade_price+commission, currency, stocks_data[currency]['quantity'])
             # Sell currency e.g. USD
             total_balance = stocks_data[currency]['quantity']
             credit = (quantity * trade_price + commission) - total_balance
@@ -300,7 +310,6 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 currency_rates=currency_rates,
                 statistics_data=statistics_data
             )
-            currency_rate = get_currency_rate(date, currency, currency_rates)
             # Split the sell processing into two parts, first update the stocks_data with the total balance
             # and then process the credit amount separately.
             # This is to handle the case where the total balance is less than the amount to be sold.
@@ -325,17 +334,20 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
         elif stocks_data[base]['quantity'] + quantity >= 0:
             # Cover margin loan with new buy entry
-            logging.debug("      covering %s %s, of total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
+            logging.debug("      buying (covering) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
             credit = stocks_data[base]['quantity'] # negative value
             surplus = credit + quantity
-            # TODO check commission handling
+            # Since the transaction includes both a covering of a short and the opening of a long position, and only one commission applies,
+            # the commission needs to be allocated proportionally to the covering and the long position.
+            commission_per_share = commission / quantity # negative quantity for sell
+            unit_price = (trade_price + commission_per_share) * currency_rate
             process_k4_entry(
                 symbol=base,
                 description=description,
                 quantity= credit,
-                trade_price=trade_price,
-                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
-                avg_price=stocks_data[base]['avgprice'],
+                trade_price=stocks_data[base]['avgprice'],
+                commission=0,
+                avg_price=unit_price,
                 currency=BASE_CURRENCY,
                 date=date,
                 k4_data=k4_data,
@@ -343,21 +355,24 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 statistics_data=statistics_data
             )
             stocks_data[base]['quantity'] = surplus
-            stocks_data[base]['totalprice'] = surplus * trade_price + commission
-            if stocks_data[base]['quantity'] == 0:
+            if surplus == 0:
+                stocks_data[base]['totalprice'] = 0
                 stocks_data[base]['avgprice'] = 0
             else:
-                stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+                stocks_data[base]['totalprice'] = surplus * unit_price
+                stocks_data[base]['avgprice'] = unit_price
         else:
             # Cover part of margin loan with new buy entry
-            logging.debug("      covering (partial) %s %s, of total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
+            logging.debug("      buying (covering partial) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
+            commission_per_share = commission / quantity
+            unit_price = (trade_price + commission_per_share) * currency_rate
             process_k4_entry(
                 symbol=base,
                 description=description,
                 quantity= -quantity,
-                trade_price=trade_price,
-                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
-                avg_price=stocks_data[base]['avgprice'],
+                trade_price=stocks_data[base]['avgprice'],
+                commission=0, # Added to unit_price
+                avg_price=unit_price,
                 currency=BASE_CURRENCY,
                 date=date,
                 k4_data=k4_data,
@@ -366,7 +381,6 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             )
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
-
 
 
     logging.debug("   Buy entry processed for %s [currency: %s]", symbol, currency)
@@ -406,21 +420,12 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
         quote = BASE_CURRENCY
     #logging.debug(f'   Split symbol into base: {base} and quote: {quote}')
     if base not in stocks_data:
-        if ' ' in base and any(c.isdigit() for c in base):
-            logging.info(f"    sell entry {base} is an options contract")
-            stocks_data[base] = {
-                'quantity': 0,
-                'totalprice': 0,
-                'avgprice': 0
-            }
-        else:
-            logging.warning(f"    First sell entry for {base}, initializing stocks_data")
-            stocks_data[base] = {
-                'quantity': 0,
-                'totalprice': 0,
-                'avgprice': 0
-            }
-
+        logging.warning(f"    First sell entry for {base}, initializing stocks_data")
+        stocks_data[base] = {
+            'quantity': 0,
+            'totalprice': 0,
+            'avgprice': 0
+        }
 
     if currency == BASE_CURRENCY:
         # UC-5. Sell stock in base currency e.g. sell ERIC-B for SEK
@@ -870,7 +875,7 @@ def save_statistics_data(year, statistics_data):
     Args:
         year: The year to save the statistics data for
     """
-    logging.debug("Saving statistics data: %s", statistics_data)
+    logging.debug("Saving statistics data (%s transactions)", len(statistics_data))
     with open(f'{OUTPUT_DIR}output_statistics_{year}.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['Date', 'Symbol', 'Description', 'Profit/Loss'])

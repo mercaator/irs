@@ -18,7 +18,7 @@ import logging
 import sys
 from pprint import pformat
 from k4sru.sru import generate_info_sru, generate_blanketter_sru
-from k4sru.data import init_currency_rates, init_stocks_data, process_transactions, save_stocks_data, save_statistics_data
+from k4sru.data import init_stocks_data, process_transactions, save_stocks_data, print_statistics
 
 INPUT_DIR = 'input/'
 
@@ -100,8 +100,9 @@ def handle_k4sru(args):
     transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates, statistics_data)
     # Save the processed data to a JSON file
     save_stocks_data(year, stocks_data)
-    save_statistics_data(year, statistics_data)
     generate_blanketter_sru(config, transactions, longnames)
+    # Print statistics data
+    print_statistics(statistics_data, k4_data, year)
 
 def main():
     parser = create_cli_parser()

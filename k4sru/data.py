@@ -23,9 +23,9 @@ from .sru import CURRENCY_CODES, OUTPUT_DIR
 # Base currency for all calculations
 BASE_CURRENCY = "SEK"
 
-def update_statistics_data(statistics_data, date, symbol, description, profit_loss):
+def update_statistics_data(statistics_data, date, symbol, description, initial_quantity, delta, profit_loss):
     # Statistics data is a list of tuples with date, symbol, and profit/loss
-    tuple = (date, symbol, description, profit_loss)
+    tuple = (date, symbol, description, initial_quantity, delta, profit_loss)
     statistics_data.append(tuple)
 
 def get_currency_rate(date, currency, currency_rates):
@@ -47,7 +47,7 @@ def get_currency_rate(date, currency, currency_rates):
         logging.error("Currency rate not found for %s on %s", currency, short_date)
         sys.exit(1)
 
-def process_k4_entry(symbol, description, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data):
+def process_k4_entry(symbol, description, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data, initial_quantity):
     """Process a sell transaction for K4 tax reporting.
 
     Args:
@@ -69,12 +69,12 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
                 'forsaljningspris': -quantity * trade_price - commission,
                 'omkostnadsbelopp': -quantity * avg_price
             }
-            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) - (-quantity * avg_price))
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += -quantity * trade_price - commission
             k4_data[symbol]['omkostnadsbelopp'] += -quantity * avg_price
-            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) - (-quantity * avg_price))
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) - (-quantity * avg_price))
     else:
@@ -87,12 +87,12 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
                 'forsaljningspris': (-quantity * trade_price - commission) * currency_rate,
                 'omkostnadsbelopp': (-quantity * avg_price)
             }
-            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price - commission) * currency_rate
             k4_data[symbol]['omkostnadsbelopp'] += (-quantity * avg_price)
-            update_statistics_data(statistics_data, date, symbol, description, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
 
@@ -225,7 +225,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] = surplus
             if surplus == 0:
@@ -250,7 +251,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
@@ -288,7 +290,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[currency]['quantity']
             )
             process_currency_sell(currency, quantity*trade_price+commission, currency_rate, stocks_data)
         elif stocks_data[currency]['quantity'] >= 0:
@@ -308,7 +311,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[currency]['quantity']
             )
             # Split the sell processing into two parts, first update the stocks_data with the total balance
             # and then process the credit amount separately.
@@ -352,7 +356,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] = surplus
             if surplus == 0:
@@ -377,7 +382,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
@@ -447,7 +453,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] += quantity
             if stocks_data[base]['quantity'] == 0:
@@ -476,7 +483,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             # Credit cannot be negative at this point, so we don't need to check for that.
             stocks_data[base]['quantity'] = credit
@@ -524,7 +532,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[currency]['quantity']
             )
             process_currency_buy(currency, credit, currency_rate, stocks_data)
             # Function expects a negative amount to be processed
@@ -543,7 +552,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[currency]['quantity']
             )
             # Function expects a negative amount to be processed
             process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
@@ -563,7 +573,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] += quantity
             if stocks_data[base]['quantity'] == 0:
@@ -591,7 +602,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 date=date,
                 k4_data=k4_data,
                 currency_rates=currency_rates,
-                statistics_data=statistics_data
+                statistics_data=statistics_data,
+                initial_quantity=stocks_data[base]['quantity']
             )
             stocks_data[base]['quantity'] = credit
             stocks_data[base]['totalprice'] = credit * unit_price * currency_rate
@@ -665,9 +677,6 @@ def process_trading_data(data, stocks_data, k4_data, currency_rates, statistics_
     logging.debug("Final K4 data:\n%s", pformat(k4_data, indent=4))
     logging.debug("Final stocks data:\n%s", pformat(stocks_data, indent=4))
 
-    # Summarize the total profit/loss
-    total_profit_loss = sum(transaction['forsaljningspris'] - transaction['omkostnadsbelopp'] for transaction in k4_data.values())
-    logging.info("==> Total profit/loss: %s", total_profit_loss)
     output = sorted(k4_data.values(), key=lambda x: x['beteckning'])
     return output
 
@@ -869,18 +878,153 @@ def save_stocks_data(year, stocks_data):
         json.dump(filtered_stocks_data, file, indent=4)
     logging.info(f"Saved portfolio data for {year}")
 
-def save_statistics_data(year, statistics_data):
+def save_statistics_data(year, journal):
     """Save the statistics data to a CSV file.
 
     Args:
         year: The year to save the statistics data for
     """
-    logging.debug("Saving statistics data (%s transactions)", len(statistics_data))
-    with open(f'{OUTPUT_DIR}output_statistics_{year}.csv', 'w', newline='') as file:
+    # Save win rate statistics to a CSV file
+    logging.debug("Saving statistics data (%s trades)", len(journal))
+    with open(f'{OUTPUT_DIR}trading_statistics_{year}.csv', 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Date', 'Symbol', 'Description', 'Profit/Loss'])
-        writer.writerows(statistics_data)
-    logging.info(f"Saved statistics data for {year}")
+        writer.writerow(['Date', 'Symbol', 'Description', 'Profit/Loss', 'Win'])
+        for entry in journal:
+            writer.writerow([entry['date'], entry['symbol'], entry['description'], entry['profit_loss'], entry['win']])
+
+def print_k4_statistics(k4_data):
+    """Print the statistics data to the console.
+
+    Args:
+        statistics_data: List of statistics data
+    """
+    logging.info("K4 statistics data:")
+    # Print header
+    logging.info("=" * 87)
+    logging.info(f"{'Symbol':<25} {'Description':<40} {'Profit/Loss (SEK)':>20}")
+    logging.info("-" * 87)
+
+    # Print each row, left-align profit/loss
+    for transaction in k4_data.values():
+        symbol = transaction['beteckning']
+        description = transaction['beskrivning']
+        profit = transaction['forsaljningspris'] - transaction['omkostnadsbelopp']
+        profit_str = f"{profit:.2f}"
+        # Print the row with left alignment
+        if profit < 0:
+            profit_abs = abs(profit)
+            profit_negative = f"({profit_abs:.2f})"  # Enclose negative profit/loss in parentheses
+            logging.info(f"{symbol:<25} {description:<40} {profit_negative:>20}")
+        else:
+            # Right-align positive profit/loss
+            logging.info(f"{symbol:<25} {description:<40} {profit_str:<20}")
+
+    logging.info("-" * 87)
+    # Print total profit/loss
+    total_profit = sum(transaction['forsaljningspris'] - transaction['omkostnadsbelopp'] for transaction in k4_data.values())
+    total_profit_str = f"{total_profit:.0f}"
+    capital_tax = f"{total_profit * 0.3:.0f}"
+    logging.info(f"{'Total Capital Income':<65} {total_profit_str:>20}")
+    # Tax to be paid
+    logging.info(f"{'Tax':<65} {capital_tax:>20}")
+    logging.info("=" * 87)
+
+def print_win_rate_statistics(statistics_data, year):
+    """Print the win rate statistics to the console.
+
+    Args:
+        statistics_data: List of statistics data
+    """
+    journal = []
+    positions = {}
+
+    for (date, symbol, description, initial_quantity, delta, profit_loss) in statistics_data:
+        # Skip BTC transactions
+        if symbol == 'BTC':
+            continue
+        # Check if the symbol is an options contract
+        if ' ' in symbol and any(c.isdigit() for c in symbol):
+            continue  # Skip options contracts
+        # Skip currencies
+        if symbol in ['USD', 'EUR', 'SEK']:
+            continue
+
+        if symbol not in positions:
+            if (initial_quantity + delta) == 0 and profit_loss < 0:
+                journal.append({
+                    'date': date,
+                    'symbol': symbol,
+                    'description': description,
+                    'profit_loss': profit_loss,
+                    'win': False
+                })
+            elif (initial_quantity + delta == 0) and profit_loss >= 0:
+                journal.append({
+                    'date': date,
+                    'symbol': symbol,
+                    'description': description,
+                    'profit_loss': profit_loss,
+                    'win': True
+                })
+            elif (initial_quantity + delta) > 0:
+                positions[symbol] = {
+                    'profit_loss': profit_loss
+                }
+        else:
+            if (initial_quantity + delta) == 0 and (positions[symbol]['profit_loss'] + profit_loss) < 0:
+                journal.append({
+                    'date': date,
+                    'symbol': symbol,
+                    'description': description,
+                    'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
+                    'win': False
+                })
+                del positions[symbol]
+            elif (initial_quantity + delta == 0) and  (positions[symbol]['profit_loss'] + profit_loss) >= 0:
+                journal.append({
+                    'date': date,
+                    'symbol': symbol,
+                    'description': description,
+                    'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
+                    'win': True
+                })
+                del positions[symbol]
+            elif (initial_quantity + delta) > 0:
+                positions[symbol]['profit_loss'] += profit_loss
+    # Print the journal
+    logging.info("Win Rate Journal:")
+    logging.info("=" * 97)
+    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'Win':>5}")
+    logging.info("-" * 97)
+    for entry in journal:
+        date = entry['date']
+        symbol = entry['symbol']
+        description = entry['description']
+        profit_loss = entry['profit_loss']
+        win = 'Yes' if entry['win'] else 'No'
+        if profit_loss < 0:
+            profit_loss_str = f"({abs(profit_loss):.2f})"
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {win:>5}")
+        else:
+            profit_loss_str = f"{profit_loss:.2f}"
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {win:>5}")
+    logging.info("-" * 97)
+    # Win rate calculation
+    total_trades = len(journal)
+    total_wins = sum(1 for entry in journal if entry['win'])
+    win_rate = (total_wins / total_trades * 100)
+    logging.info(f"Total Trades: {total_trades}, Total Wins: {total_wins}, Win Rate: {win_rate:.2f}%")
+    logging.info("=" * 97)
+    save_statistics_data(year, journal)
+
+def print_statistics(statistics_data, k4_data, year):
+    """Print the statistics data to the console.
+
+    Args:
+        statistics_data: List of statistics data
+    """
+    print_k4_statistics(k4_data)
+    print_win_rate_statistics(statistics_data, year)
 
 def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4_data, currency_rates, statistics_data):
     """Process the input file and generate tax reports.

@@ -33,7 +33,7 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_k4_entry_001(self):
         k4_data = {}
         statistics_data = []
-        process_k4_entry('ERIC-B', 'Ericsson', -10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data)
+        process_k4_entry('ERIC-B', 'Ericsson', -10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data, 10)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(k4_data['ERIC-B']['antal'], 10)
         self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 10*100-1)
@@ -42,7 +42,7 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_k4_entry_002(self):
         k4_data = {}
         statistics_data = []
-        process_k4_entry('ERIC-B', 'Ericsson', -10, 80, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data)
+        process_k4_entry('ERIC-B', 'Ericsson', -10, 80, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data, 10)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(k4_data['ERIC-B']['antal'], 10)
         self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 10*80-1)
@@ -51,7 +51,7 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_k4_entry_003(self):
         k4_data = { 'ERIC-B': {'antal': 10, 'forsaljningspris': 950, 'omkostnadsbelopp': 900} }
         statistics_data = []
-        process_k4_entry('ERIC-B', 'Ericsson',-10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data)
+        process_k4_entry('ERIC-B', 'Ericsson',-10, 100, 1, 90, 'SEK', '20250101', k4_data, self.currency_rates, statistics_data, 10)
         self.assertIn('ERIC-B', k4_data)
         self.assertEqual(k4_data['ERIC-B']['antal'], 20)
         self.assertEqual(k4_data['ERIC-B']['forsaljningspris'], 950 + (10*100-1)) # 1949
@@ -60,7 +60,7 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_k4_entry_004(self):
         k4_data = {}
         statistics_data = []
-        process_k4_entry('AAOI', 'Applied Optoelectronics Inc', -10, 30, 1, 290, 'USD', '20250101', k4_data, self.currency_rates, statistics_data)
+        process_k4_entry('AAOI', 'Applied Optoelectronics Inc', -10, 30, 1, 290, 'USD', '20250101', k4_data, self.currency_rates, statistics_data, 10)
         self.assertIn('AAOI', k4_data)
         self.assertEqual(k4_data['AAOI']['antal'], 10)
         self.assertEqual(k4_data['AAOI']['forsaljningspris'], (10*30-1)*10.0)
@@ -69,7 +69,7 @@ class TestDataFunctions(unittest.TestCase):
     def test_process_k4_entry_005(self):
         k4_data = { 'AAOI': {'antal': 10, 'forsaljningspris': 3000, 'omkostnadsbelopp': 2900} }
         statistics_data = []
-        process_k4_entry('AAOI', 'Applied Optoelectronics Inc', -10, 30, 1, 290, 'USD', '20250102', k4_data, self.currency_rates, statistics_data)
+        process_k4_entry('AAOI', 'Applied Optoelectronics Inc', -10, 30, 1, 290, 'USD', '20250102', k4_data, self.currency_rates, statistics_data, 10)
         self.assertIn('AAOI', k4_data)
         self.assertEqual(k4_data['AAOI']['antal'], 20)
         self.assertEqual(k4_data['AAOI']['forsaljningspris'], 3000 + ((10*30-1)*11.0)) # 6289

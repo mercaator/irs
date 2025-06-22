@@ -23,6 +23,8 @@ from .sru import CURRENCY_CODES, OUTPUT_DIR
 # Base currency for all calculations
 BASE_CURRENCY = "SEK"
 
+SUPPORTED_CURRENCIES = ["USD", "EUR", "DKK" ]
+
 def update_statistics_data(statistics_data, date, symbol, description, initial_quantity, delta, profit_loss):
     # Statistics data is a list of tuples with date, symbol, and profit/loss
     tuple = (date, symbol, description, initial_quantity, delta, profit_loss)
@@ -155,6 +157,13 @@ def process_currency_sell(currency, amount, currency_rate, stocks_data):
         stocks_data[currency]['totalprice'] += -amount * currency_rate
         stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
 
+def print_balances(stocks_data):
+    for currency in SUPPORTED_CURRENCIES:
+        if currency in stocks_data:
+            liquidity = stocks_data[currency]['quantity']
+            avgprice = stocks_data[currency]['avgprice']
+            if currency == 'USD' or (currency != 'USD' and liquidity != 0):
+                logging.debug("   Balance (%s): %.2f -- %s/SEK: %.2f", currency, liquidity, currency, avgprice)
 
 def process_buy_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
     """Process a buy transaction.
@@ -277,6 +286,14 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
         currency_rate = get_currency_rate(date, currency, currency_rates)
         logging.debug(f"   Action (1/2): Sell {currency} for {BASE_CURRENCY}")
 
+        if currency not in stocks_data:
+            logging.debug("      first sell entry for %s", base)
+            stocks_data[currency] = {
+                'quantity': 0,
+                'totalprice': 0,
+                'avgprice': 0
+            }
+
         if stocks_data[currency]['quantity'] - (quantity * trade_price + commission) >= 0:
             # Sell currency e.g. USD
             process_k4_entry(
@@ -299,21 +316,22 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             # Sell currency e.g. USD
             total_balance = stocks_data[currency]['quantity']
             credit = (quantity * trade_price + commission) - total_balance
-            process_currency_sell(currency, total_balance, currency_rate, stocks_data)
-            process_k4_entry(
-                symbol=currency,
-                description=currency,
-                quantity= -total_balance,
-                trade_price=currency_rate,
-                commission=0, # FOREX fee for automatic currency exchange included in IBCommission
-                avg_price=stocks_data[currency]['avgprice'],
-                currency=BASE_CURRENCY,
-                date=date,
-                k4_data=k4_data,
-                currency_rates=currency_rates,
-                statistics_data=statistics_data,
-                initial_quantity=stocks_data[currency]['quantity']
-            )
+            if total_balance > 0:
+                process_currency_sell(currency, total_balance, currency_rate, stocks_data)
+                process_k4_entry(
+                    symbol=currency,
+                    description=currency,
+                    quantity= -total_balance,
+                    trade_price=currency_rate,
+                    commission=0, # FOREX fee for automatic currency exchange included in IBCommission
+                    avg_price=stocks_data[currency]['avgprice'],
+                    currency=BASE_CURRENCY,
+                    date=date,
+                    k4_data=k4_data,
+                    currency_rates=currency_rates,
+                    statistics_data=statistics_data,
+                    initial_quantity=stocks_data[currency]['quantity']
+                )
             # Split the sell processing into two parts, first update the stocks_data with the total balance
             # and then process the credit amount separately.
             # This is to handle the case where the total balance is less than the amount to be sold.
@@ -391,20 +409,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
 
     logging.debug("   Buy entry processed for %s [currency: %s]", symbol, currency)
     logging.debug("   Updated stock data for %s: %s", base, stocks_data[base])
-
-    liquidity_usd = 0
-    liquidity_eur = 0
-    usd_sek = 0
-    eur_sek = 0
-    if 'USD' in stocks_data:
-        liquidity_usd = stocks_data['USD']['quantity']
-        usd_sek = stocks_data['USD']['avgprice']
-    if 'EUR' in stocks_data:
-        liquidity_eur = stocks_data['EUR']['quantity']
-        eur_sek = stocks_data['EUR']['avgprice']
-
-    logging.debug("   Liquidity (USD): %.2f -- USD/SEK: %.2f", liquidity_usd, usd_sek)
-    logging.debug("   Liquidity (EUR): %.2f -- EUR/SEK: %.2f", liquidity_eur, eur_sek)
+    print_balances(stocks_data)
 
 def process_sell_entry(symbol, description, quantity, trade_price, commission, currency, date, stocks_data, k4_data, currency_rates, statistics_data):
     """Process a sell transaction.
@@ -638,21 +643,7 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
 
     logging.debug("   Sell entry processed for %s [currency: %s]", symbol, currency)
     logging.debug("   Updated stock data for %s: %s", base, stocks_data[base])
-    liquidity_usd = 0
-    liquidity_eur = 0
-    usd_sek = 0
-    eur_sek = 0
-    if 'USD' in stocks_data:
-        liquidity_usd = stocks_data['USD']['quantity']
-        usd_sek = stocks_data['USD']['avgprice']
-    if 'EUR' in stocks_data:
-        liquidity_eur = stocks_data['EUR']['quantity']
-        eur_sek = stocks_data['EUR']['avgprice']
-
-    logging.debug("   Liquidity (USD): %.2f -- USD/SEK: %.2f", liquidity_usd, usd_sek)
-    logging.debug("   Liquidity (EUR): %.2f -- EUR/SEK: %.2f", liquidity_eur, eur_sek)
-
-
+    print_balances(stocks_data)
 
 def process_input_data(data, stocks_data, k4_data, currency_rates, statistics_data):
     for entry in data:
@@ -792,9 +783,16 @@ def process_currency_rates(rates, currency_rates, year):
             date = rate['Date/Time'].split(';')[0]
             key = (date, rate['FromCurrency'])
             currency_rates[key] = float(rate['Rate'])
+        elif rate['FromCurrency'] == 'DKK':
+            date = rate['Date/Time'].split(';')[0]
+            key = (date, rate['FromCurrency'])
+            currency_rates[key] = float(rate['Rate'])
 
     for key, value in currency_rates.items():
         if key[1] == 'EUR':
+            usdsek = currency_rates[(key[0], 'USD')]
+            currency_rates[key] = usdsek * value
+        if key[1] == 'DKK':
             usdsek = currency_rates[(key[0], 'USD')]
             currency_rates[key] = usdsek * value
 
@@ -946,7 +944,7 @@ def print_win_rate_statistics(statistics_data, year):
         if ' ' in symbol and any(c.isdigit() for c in symbol):
             continue  # Skip options contracts
         # Skip currencies
-        if symbol in ['USD', 'EUR', 'SEK']:
+        if symbol in ['USD', 'EUR', 'SEK', 'DKK']:
             continue
 
         if symbol not in positions:

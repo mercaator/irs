@@ -376,6 +376,27 @@ class TestDataFunctions(unittest.TestCase):
         self.assertEqual(stocks_data['USD']['totalprice'], -4810) # -1800 - (301 * 10) = -4810
         self.assertEqual(stocks_data['USD']['avgprice'], 4810 / 501) # 4810 / 501 = 9.60
 
+    def test_process_buy_entry_036(self):
+        """UC-3. Buy stock in foreign currency e.g. buy AAOI for USD
+                 Transactions: Buy AAOI, Sell USD
+                 No USD, No stock, USD short, stock long
+        """
+        stocks_data = {}
+        k4_data = {}
+        statistics_data = []
+        # Commission is changed to positive value when processing buy entry called from process_input_data
+        process_buy_entry('AAOI', 'Applied Optoelectronics Inc', 10, 30, 1, 'USD', '20250101', stocks_data, k4_data, self.currency_rates, statistics_data)
+        self.assertNotIn('USD', k4_data)
+        self.assertNotIn('AAOI', k4_data)
+
+        self.assertIn('AAOI', stocks_data)
+        self.assertEqual(stocks_data['AAOI']['quantity'], 10)
+        self.assertEqual(stocks_data['AAOI']['totalprice'], 3010) # 10 * (10 * 30 + 1) = 3010
+        self.assertEqual(stocks_data['AAOI']['avgprice'], 301) # 3010 / 10 = 301
+        self.assertIn('USD', stocks_data)
+        self.assertEqual(stocks_data['USD']['quantity'], -301) # - (10 * 30 + 1) = -301
+        self.assertEqual(stocks_data['USD']['totalprice'], -3010) # - (10 * 30 + 1) * 10 = -3010
+        self.assertEqual(stocks_data['USD']['avgprice'], 10.0) # 3010 / 301 = 10.0
 
 
     def test_process_buy_entry_040(self):

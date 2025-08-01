@@ -25,9 +25,9 @@ BASE_CURRENCY = "SEK"
 
 SUPPORTED_CURRENCIES = ["USD", "EUR", "DKK" ]
 
-def update_statistics_data(statistics_data, date, symbol, description, initial_quantity, delta, profit_loss):
+def update_statistics_data(statistics_data, date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage):
     # Statistics data is a list of tuples with date, symbol, and profit/loss
-    tuple = (date, symbol, description, initial_quantity, delta, profit_loss)
+    tuple = (date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage)
     statistics_data.append(tuple)
 
 def get_currency_rate(date, currency, currency_rates):
@@ -71,14 +71,18 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
                 'forsaljningspris': -quantity * trade_price - commission,
                 'omkostnadsbelopp': -quantity * avg_price
             }
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) - (-quantity * avg_price))
+            profit_loss = (-quantity * trade_price - commission) - (-quantity * avg_price)
+            profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += -quantity * trade_price - commission
             k4_data[symbol]['omkostnadsbelopp'] += -quantity * avg_price
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) - (-quantity * avg_price))
+            profit_loss = (-quantity * trade_price - commission) - (-quantity * avg_price)
+            profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
 
-        logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) - (-quantity * avg_price))
+        logging.info("    ==> K4 Tax event - Profit/Loss: %.2f (%.2f%%)", profit_loss, profit_loss_percentage)
     else:
         currency_rate = get_currency_rate(date, currency, currency_rates)
         if symbol not in k4_data:
@@ -89,14 +93,18 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
                 'forsaljningspris': (-quantity * trade_price - commission) * currency_rate,
                 'omkostnadsbelopp': (-quantity * avg_price)
             }
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+            profit_loss = (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price)
+            profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price - commission) * currency_rate
             k4_data[symbol]['omkostnadsbelopp'] += (-quantity * avg_price)
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+            profit_loss = (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price)
+            profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
 
-        logging.info("    ==> K4 Tax event - Profit/Loss: %s", (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price))
+        logging.info("    ==> K4 Tax event - Profit/Loss: %.2f (%.2f%%)", profit_loss, profit_loss_percentage)
 
 def process_currency_buy(currency, amount, currency_rate, stocks_data):
     """Process a currency transaction.
@@ -929,9 +937,9 @@ def save_statistics_data(year, journal):
     logging.debug("Saving statistics data (%s trades)", len(journal))
     with open(f'{OUTPUT_DIR}trading_statistics_{year}.csv', 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['Date', 'Symbol', 'Description', 'Profit/Loss', 'Win'])
+        writer.writerow(['Date', 'Symbol', 'Description', 'Profit/Loss', 'Percent', 'Win'])
         for entry in journal:
-            writer.writerow([entry['date'], entry['symbol'], entry['description'], entry['profit_loss'], entry['win']])
+            writer.writerow([entry['date'], entry['symbol'], entry['description'], entry['profit_loss'], entry['profit_loss_percentage'], entry['win']])
 
 def print_k4_statistics(k4_data):
     """Print the statistics data to the console.
@@ -970,6 +978,81 @@ def print_k4_statistics(k4_data):
     logging.info(f"{'Tax':<65} {capital_tax:>20}")
     logging.info("=" * 87)
 
+def calculate_profit_loss_percentage(profit_loss_percentage_list):
+    """Calculate the average profit/loss percentage from a list of tuples.
+
+    Args:
+        profit_loss_percentage_list: List of tuples containing (delta, profit_loss_percentage)
+    """
+    if not profit_loss_percentage_list:
+        return 0.0
+    total_delta = sum(delta for delta, _ in profit_loss_percentage_list)
+    if total_delta == 0:
+        return 0.0
+    total_profit_loss_percentage = sum(delta * profit_loss_percentage for delta, profit_loss_percentage in profit_loss_percentage_list)
+    return total_profit_loss_percentage / total_delta if total_delta != 0 else 0.0
+
+def print_monthly_tracker(journal):
+    """Print the monthly tracker to the console.
+
+    Args:
+        journal: List of journal entries
+    """
+    logging.info("Monthly Tracker:")
+    logging.info("=" * 97)
+    logging.info(f"{'YYYYMM':<10} {'Avg Gain':>10} {'Avg Loss':>10} {'Win %':>10} {'Trades #':>10} {'LG Gain':>10} {'LG Loss':>10} {'Avg Days G':>10} {'Avg Days L':>10}")
+    logging.info("-" * 97)
+
+    # Get a list of months in the journal
+    months = sorted(set(entry['date'][:6] for entry in journal))  # YYYY-MM format
+    #logging.info("Months in journal: %s", months)
+    for month in months:
+        month_entries = [entry for entry in journal if entry['date'].startswith(month)]
+        total_trades = len(month_entries)
+        if total_trades == 0:
+            continue
+        total_wins = sum(1 for entry in month_entries if entry['win'])
+        total_losses = total_trades - total_wins
+        win_rate = (total_wins / total_trades * 100) if total_trades > 0 else 0.0
+        average_gain = sum(entry['profit_loss_percentage'] for entry in month_entries if entry['win']) / total_wins if total_wins > 0 else 0.0
+        average_loss = sum(entry['profit_loss_percentage'] for entry in month_entries if not entry['win']) / total_losses if total_losses > 0 else 0.0
+        # Largest gain and loss percentage
+        largest_gain = max((entry['profit_loss_percentage'] for entry in month_entries if entry['win']), default=0.0)
+        largest_loss = min((entry['profit_loss_percentage'] for entry in month_entries if not entry['win']), default=0.0)
+        # TODO avg days gain/loss
+
+        # Print the monthly statistics
+        logging.info(f"{month:<10} {average_gain:>10.2f} {average_loss:>10.2f} {win_rate:>10.2f} {total_trades:>10} {largest_gain:>10.2f} {largest_loss:>10.2f} {'N/A':>10} {'N/A':>10}")
+
+    logging.info("-" * 97)
+    logging.info("")
+
+def print_trading_summary(journal):
+    """Print the trading summary to the console.
+
+    Args:
+        journal: List of journal entries
+    """
+    logging.info("Trading Summary:")
+    logging.info("=" * 97)
+    logging.info(f"{'Metric':<30} {'Value':>15}")
+    logging.info("-" * 97)
+    total_trades = len(journal)
+    total_wins = sum(1 for entry in journal if entry['win'])
+    total_losses = total_trades - total_wins
+    win_rate = (total_wins / total_trades * 100) if total_trades > 0 else 0.0
+    average_gain = sum(entry['profit_loss_percentage'] for entry in journal if entry['win']) / total_wins if total_wins > 0 else 0.0
+    average_loss = sum(entry['profit_loss_percentage'] for entry in journal if not entry['win']) / total_losses if total_losses > 0 else 0.0
+    win_loss_ratio = (average_gain / abs(average_loss)) if average_loss != 0 else float('inf')
+    adjusted_win_loss_ratio = average_gain * (win_rate / 100) / (abs(average_loss) * (1 - (win_rate / 100))) if average_loss != 0 and win_rate < 100 else float('inf')
+    logging.info(f"{'Winning Percentage':<30} {win_rate:>15.2f}")
+    logging.info(f"{'Average Gain':<30} {average_gain:>15.2f}")
+    logging.info(f"{'Average Loss':<30} {average_loss:>15.2f}")
+    logging.info(f"{'Win/Loss Ratio':<30} {win_loss_ratio:>15.2f}")
+    logging.info(f"{'Adj. Win/Loss Ratio':<30} {adjusted_win_loss_ratio:>15.2f}")
+    logging.info("-" * 97)
+    logging.info("")
+
 def print_win_rate_statistics(statistics_data, year):
     """Print the win rate statistics to the console.
 
@@ -979,7 +1062,7 @@ def print_win_rate_statistics(statistics_data, year):
     journal = []
     positions = {}
 
-    for (date, symbol, description, initial_quantity, delta, profit_loss) in statistics_data:
+    for (date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage) in statistics_data:
         # Skip BTC transactions
         if symbol == 'BTC':
             continue
@@ -997,6 +1080,7 @@ def print_win_rate_statistics(statistics_data, year):
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': profit_loss,
+                    'profit_loss_percentage': profit_loss_percentage,
                     'win': False
                 })
             elif (initial_quantity + delta == 0) and profit_loss >= 0:
@@ -1005,57 +1089,77 @@ def print_win_rate_statistics(statistics_data, year):
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': profit_loss,
+                    'profit_loss_percentage': profit_loss_percentage,
                     'win': True
                 })
             elif (initial_quantity + delta) > 0:
                 positions[symbol] = {
-                    'profit_loss': profit_loss
+                    'profit_loss': profit_loss,
+                    'profit_loss_percentage': [(delta, profit_loss_percentage)]
                 }
         else:
             if (initial_quantity + delta) == 0 and (positions[symbol]['profit_loss'] + profit_loss) < 0:
+                positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
                 journal.append({
                     'date': date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
+                    'profit_loss_percentage': calculate_profit_loss_percentage(positions[symbol]['profit_loss_percentage']),
                     'win': False
                 })
                 del positions[symbol]
             elif (initial_quantity + delta == 0) and  (positions[symbol]['profit_loss'] + profit_loss) >= 0:
+                positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
                 journal.append({
                     'date': date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
+                    'profit_loss_percentage': calculate_profit_loss_percentage(positions[symbol]['profit_loss_percentage']),
                     'win': True
                 })
                 del positions[symbol]
             elif (initial_quantity + delta) > 0:
                 positions[symbol]['profit_loss'] += profit_loss
+                positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
+
     # Print the journal
     logging.info("Win Rate Journal:")
     logging.info("=" * 97)
-    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'Win':>5}")
+    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Win':>5}")
     logging.info("-" * 97)
     for entry in journal:
         date = entry['date']
         symbol = entry['symbol']
         description = entry['description']
         profit_loss = entry['profit_loss']
+        profit_loss_percentage = entry['profit_loss_percentage']
         win = 'Yes' if entry['win'] else 'No'
         if profit_loss < 0:
             profit_loss_str = f"({abs(profit_loss):.2f})"
-            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {win:>5}")
+            profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {win:>5}")
         else:
             profit_loss_str = f"{profit_loss:.2f}"
-            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {win:>5}")
+            profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {win:>5}")
     logging.info("-" * 97)
     # Win rate calculation
     total_trades = len(journal)
     total_wins = sum(1 for entry in journal if entry['win'])
+    total_losses = total_trades - total_wins
     win_rate = (total_wins / total_trades * 100)
+    # Calculate average gain and the average loss over all trades
+    average_gain = sum(entry['profit_loss_percentage'] for entry in journal if entry['win']) / total_wins if total_wins > 0 else 0
+    average_loss = sum(entry['profit_loss_percentage'] for entry in journal if not entry['win']) / total_losses if total_losses > 0 else 0
+
     logging.info(f"Total Trades: {total_trades}, Total Wins: {total_wins}, Win Rate: {win_rate:.2f}%")
+    logging.info(f"Average Gain: {average_gain:.2f}%, Average Loss: {average_loss:.2f}%")
     logging.info("=" * 97)
+    logging.info("")
+    print_monthly_tracker(journal)
+    print_trading_summary(journal)
     save_statistics_data(year, journal)
 
 def print_statistics(statistics_data, k4_data, year):

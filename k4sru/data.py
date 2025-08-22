@@ -25,9 +25,9 @@ BASE_CURRENCY = "SEK"
 
 SUPPORTED_CURRENCIES = ["USD", "EUR", "DKK" ]
 
-def update_statistics_data(statistics_data, date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage):
+def update_statistics_data(statistics_data, date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage, entry_date):
     # Statistics data is a list of tuples with date, symbol, and profit/loss
-    tuple = (date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage)
+    tuple = (date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage, entry_date)
     statistics_data.append(tuple)
 
 def get_currency_rate(date, currency, currency_rates):
@@ -49,7 +49,7 @@ def get_currency_rate(date, currency, currency_rates):
         logging.error("Currency rate not found for %s on %s", currency, short_date)
         sys.exit(1)
 
-def process_k4_entry(symbol, description, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data, initial_quantity):
+def process_k4_entry(symbol, description, quantity, trade_price, commission, avg_price, currency, date, k4_data, currency_rates, statistics_data, initial_quantity, entry_date):
     """Process a sell transaction for K4 tax reporting.
 
     Args:
@@ -61,7 +61,7 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
         currency: Currency of the transaction
         date: Date of the transaction
     """
-    logging.info("    ==> Processing k4 entry: %s (%s), %s, %s, %s, %s, %s, %s", symbol, description, quantity, trade_price, commission, avg_price, currency, date)
+    logging.info("    ==> Processing k4 entry: %s (%s), %s, %s, %s, %s, %s, %s, %s", symbol, description, quantity, trade_price, commission, avg_price, currency, date, entry_date)
     if currency == BASE_CURRENCY:
         if symbol not in k4_data:
             k4_data[symbol] = {
@@ -73,14 +73,14 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
             }
             profit_loss = (-quantity * trade_price - commission) - (-quantity * avg_price)
             profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage, entry_date)
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += -quantity * trade_price - commission
             k4_data[symbol]['omkostnadsbelopp'] += -quantity * avg_price
             profit_loss = (-quantity * trade_price - commission) - (-quantity * avg_price)
             profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage, entry_date)
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %.2f (%.2f%%)", profit_loss, profit_loss_percentage)
     else:
@@ -95,18 +95,18 @@ def process_k4_entry(symbol, description, quantity, trade_price, commission, avg
             }
             profit_loss = (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price)
             profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage, entry_date)
         else:
             k4_data[symbol]['antal'] += -quantity
             k4_data[symbol]['forsaljningspris'] += (-quantity * trade_price - commission) * currency_rate
             k4_data[symbol]['omkostnadsbelopp'] += (-quantity * avg_price)
             profit_loss = (-quantity * trade_price - commission) * currency_rate - (-quantity * avg_price)
             profit_loss_percentage = (profit_loss / (-quantity * avg_price)) * 100 if (-quantity * avg_price) != 0 else 0
-            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage)
+            update_statistics_data(statistics_data, date, symbol, description, initial_quantity, quantity, profit_loss, profit_loss_percentage, entry_date)
 
         logging.info("    ==> K4 Tax event - Profit/Loss: %.2f (%.2f%%)", profit_loss, profit_loss_percentage)
 
-def process_currency_buy(currency, amount, currency_rate, stocks_data):
+def process_currency_buy(currency, amount, currency_rate, stocks_data, date):
     """Process a currency transaction.
 
     Args:
@@ -114,9 +114,10 @@ def process_currency_buy(currency, amount, currency_rate, stocks_data):
         amount: Amount of currency bought
         currency_rate: Exchange rate to SEK
     """
-    logging.debug("      buying %s %s, %s/SEK = %s", -amount, currency, currency, currency_rate)
+    logging.debug("      buying %s %s, %s/SEK = %s, %s", -amount, currency, currency, currency_rate, date)
     if currency not in stocks_data:
         stocks_data[currency] = {
+            'entry_date': date,
             'quantity': -amount,
             'totalprice': -amount * currency_rate,
             'avgprice': currency_rate
@@ -138,7 +139,7 @@ def process_currency_buy(currency, amount, currency_rate, stocks_data):
             stocks_data[currency]['avgprice'] = 0.0
 
 
-def process_currency_sell(currency, amount, currency_rate, stocks_data):
+def process_currency_sell(currency, amount, currency_rate, stocks_data, date):
     """Process a currency transaction.
 
     Args:
@@ -149,17 +150,18 @@ def process_currency_sell(currency, amount, currency_rate, stocks_data):
     if currency not in stocks_data:
         logging.warning("Initial short selling of entry %s", currency)
         stocks_data[currency] = {
+            'entry_date': date,
             'quantity': 0,
             'totalprice': 0,
             'avgprice': 0
         }
 
     if stocks_data[currency]['quantity'] > 0:
-        logging.debug("      selling %s %s, %s/SEK = %s", -amount, currency, currency, stocks_data[currency]['avgprice'])
+        logging.debug("      selling %s %s, %s/SEK = %s, %s", -amount, currency, currency, stocks_data[currency]['avgprice'], date)
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * stocks_data[currency]['avgprice']
     else:
-        logging.debug("      added margin loan %s %s, %s/SEK = %s", -amount, currency, currency, currency_rate)
+        logging.debug("      added margin loan %s %s, %s/SEK = %s, %s", -amount, currency, currency, currency_rate, date)
         # Update averge price on margin loan
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * currency_rate
@@ -232,6 +234,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             # First buy entry for this stock
             logging.debug("      first buy entry for %s", base)
             stocks_data[base] = {
+                'entry_date': date,
                 'quantity': quantity,
                 'totalprice': quantity * trade_price + commission
             }
@@ -252,6 +255,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             unit_price = trade_price + commission_per_share
 
             # TODO: might need an if else to handle currency and stock commissions separately
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -264,12 +268,16 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] = surplus
             if surplus == 0:
                 stocks_data[base]['totalprice'] = 0
                 stocks_data[base]['avgprice'] = 0
+                # Delete entry_date from stocks_data
+                if 'entry_date' in stocks_data[base]:
+                    del stocks_data[base]['entry_date']
             else:
                 stocks_data[base]['totalprice'] = surplus * unit_price
                 stocks_data[base]['avgprice'] = unit_price
@@ -278,6 +286,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             logging.debug("      buying (covering partial) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
             commission_per_share = commission / quantity
             unit_price = trade_price + commission_per_share
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -290,7 +299,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
@@ -318,6 +328,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
         if currency not in stocks_data:
             logging.debug("      first sell entry for %s", base)
             stocks_data[currency] = {
+                'entry_date': date,
                 'quantity': 0,
                 'totalprice': 0,
                 'avgprice': 0
@@ -325,6 +336,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
 
         if stocks_data[currency]['quantity'] - (quantity * trade_price + commission) >= 0:
             # Sell currency e.g. USD
+            entry_date = stocks_data[currency]['entry_date'] if 'entry_date' in stocks_data[currency] else date
             process_k4_entry(
                 symbol=currency,
                 description=currency,
@@ -337,16 +349,18 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[currency]['quantity']
+                initial_quantity=stocks_data[currency]['quantity'],
+                entry_date=entry_date
             )
-            process_currency_sell(currency, quantity*trade_price+commission, currency_rate, stocks_data)
+            process_currency_sell(currency, quantity*trade_price+commission, currency_rate, stocks_data, date)
         elif stocks_data[currency]['quantity'] >= 0:
             logging.warning("      (margin loan new) selling %s %s, but only %s available ", quantity*trade_price+commission, currency, stocks_data[currency]['quantity'])
             # Sell currency e.g. USD
             total_balance = stocks_data[currency]['quantity']
             credit = (quantity * trade_price + commission) - total_balance
             if total_balance > 0:
-                process_currency_sell(currency, total_balance, currency_rate, stocks_data)
+                process_currency_sell(currency, total_balance, currency_rate, stocks_data, date)
+                entry_date = stocks_data[currency]['entry_date'] if 'entry_date' in stocks_data[currency] else date
                 process_k4_entry(
                     symbol=currency,
                     description=currency,
@@ -359,15 +373,16 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                     k4_data=k4_data,
                     currency_rates=currency_rates,
                     statistics_data=statistics_data,
-                    initial_quantity=stocks_data[currency]['quantity']
+                    initial_quantity=stocks_data[currency]['quantity'],
+                    entry_date=entry_date
                 )
             # Split the sell processing into two parts, first update the stocks_data with the total balance
             # and then process the credit amount separately.
             # This is to handle the case where the total balance is less than the amount to be sold.
-            process_currency_sell(currency, credit, currency_rate, stocks_data)
+            process_currency_sell(currency, credit, currency_rate, stocks_data, date)
         else:
             logging.warning("      (margin loan add) new margin loan %s %s, added to existing loan %s ", quantity*trade_price+commission, currency, stocks_data[currency]['quantity'])
-            process_currency_sell(currency, quantity * trade_price + commission, currency_rate, stocks_data)
+            process_currency_sell(currency, quantity * trade_price + commission, currency_rate, stocks_data, date)
 
 
         logging.debug(f"   Action (2/2): Buy {base} for {quote}")
@@ -375,6 +390,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
         if base not in stocks_data:
             logging.debug("      first buy entry for %s", base)
             stocks_data[base] = {
+                'entry_date': date,
                 'quantity': quantity,
                 'totalprice': (quantity * trade_price + commission) * currency_rate
             }
@@ -394,6 +410,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             # the commission needs to be allocated proportionally to the covering and the long position.
             commission_per_share = commission / quantity # negative quantity for sell
             unit_price = (trade_price + commission_per_share) * currency_rate
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -406,12 +423,16 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] = surplus
             if surplus == 0:
                 stocks_data[base]['totalprice'] = 0
                 stocks_data[base]['avgprice'] = 0
+                # Delete entry_date from stocks_data
+                if 'entry_date' in stocks_data[base]:
+                    del stocks_data[base]['entry_date']
                 usd_statistics_zero(stocks_data, base)
             else:
                 stocks_data[base]['totalprice'] = surplus * unit_price
@@ -422,6 +443,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             logging.debug("      buying (covering partial) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
             commission_per_share = commission / quantity
             unit_price = (trade_price + commission_per_share) * currency_rate
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -434,7 +456,8 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice']
@@ -492,6 +515,7 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
         logging.debug(f"   Action (1/1): Sell {base} for {quote}")
         if stocks_data[base]['quantity'] + quantity >= 0:
             # Normal case, selling shares from long position
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -504,12 +528,16 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] += quantity
             if stocks_data[base]['quantity'] == 0:
                 stocks_data[base]['totalprice'] = 0
                 stocks_data[base]['avgprice'] = 0
+                # Delete entry_date from stocks_data
+                if 'entry_date' in stocks_data[base]:
+                    del stocks_data[base]['entry_date']
             else:
                 stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ commission
 
@@ -522,6 +550,7 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
             # the commission needs to be allocated proportionally to the sale and the short position.
             commission_per_share = commission / -quantity # negative quantity for sell
             unit_price = trade_price - commission_per_share
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -534,7 +563,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             # Credit cannot be negative at this point, so we don't need to check for that.
             stocks_data[base]['quantity'] = credit
@@ -567,11 +597,12 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
         if stocks_data[currency]['quantity'] >= 0:
             # Quantity is negative for sell entries, commission is turned positive in process_input_data.
             # Total amount of currency received is quantity * trade_price + commission e.g. -10 * 10 + 1 = -99
-            process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
+            process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data, date)
         elif stocks_data[currency]['quantity'] + (-quantity * trade_price - commission) >= 0:
             logging.debug("      paying back %s %s, of total margin loan %s %s", -(quantity * trade_price + commission), currency, stocks_data[currency]['quantity'], currency)
             credit = stocks_data[currency]['quantity'] # negative value
             surplus = credit + -(quantity * trade_price + commission)
+            entry_date = stocks_data[currency]['entry_date'] if 'entry_date' in stocks_data[currency] else date
             process_k4_entry(
                 symbol=currency,
                 description=currency,
@@ -584,14 +615,16 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[currency]['quantity']
+                initial_quantity=stocks_data[currency]['quantity'],
+                entry_date=entry_date
             )
-            process_currency_buy(currency, credit, currency_rate, stocks_data)
+            process_currency_buy(currency, credit, currency_rate, stocks_data, date)
             # Function expects a negative amount to be processed
-            process_currency_buy(currency, -surplus, currency_rate, stocks_data)
+            process_currency_buy(currency, -surplus, currency_rate, stocks_data, date)
         else:
             logging.debug("      covering (partial) %s %s, of total margin loan %s %s", -(quantity * trade_price + commission), currency, stocks_data[currency]['quantity'], currency)
             cover_amount = (quantity * trade_price + commission) # Keep the amount negative for processing
+            entry_date = stocks_data[currency]['entry_date'] if 'entry_date' in stocks_data[currency] else date
             process_k4_entry(
                 symbol=currency,
                 description=currency,
@@ -604,15 +637,17 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[currency]['quantity']
+                initial_quantity=stocks_data[currency]['quantity'],
+                entry_date=entry_date
             )
             # Function expects a negative amount to be processed
-            process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data)
+            process_currency_buy(currency, quantity * trade_price + commission, currency_rate, stocks_data, date)
 
         logging.debug(f"   Action (2/2): Sell {base} for {quote}")
 
         if stocks_data[base]['quantity'] + quantity >= 0:
             # Normal case, selling shares from long position
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -625,12 +660,16 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] += quantity
             if stocks_data[base]['quantity'] == 0:
                 stocks_data[base]['totalprice'] = 0
                 stocks_data[base]['avgprice'] = 0
+                # Delete entry_date from stocks_data
+                if 'entry_date' in stocks_data[base]:
+                    del stocks_data[base]['entry_date']
                 usd_statistics_zero(stocks_data, base)
             else:
                 stocks_data[base]['totalprice'] += quantity * stocks_data[base]['avgprice'] #+ (commission * currency_rate)
@@ -644,6 +683,7 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
             # the commission needs to be allocated proportionally to the sale and the short position.
             commission_per_share = commission / -quantity # negative quantity for sell
             unit_price = trade_price - commission_per_share
+            entry_date = stocks_data[base]['entry_date'] if 'entry_date' in stocks_data[base] else date
             process_k4_entry(
                 symbol=base,
                 description=description,
@@ -656,7 +696,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
                 k4_data=k4_data,
                 currency_rates=currency_rates,
                 statistics_data=statistics_data,
-                initial_quantity=stocks_data[base]['quantity']
+                initial_quantity=stocks_data[base]['quantity'],
+                entry_date=entry_date
             )
             stocks_data[base]['quantity'] = credit
             stocks_data[base]['totalprice'] = credit * unit_price * currency_rate
@@ -685,6 +726,9 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
         logging.debug("   Rounding error when processing %s, quantity: %s", base, stocks_data[base]['quantity'])
         stocks_data[base]['quantity'] = 0
         stocks_data[base]['avgprice'] = 0
+        # Delete entry_date from stocks_data
+        if 'entry_date' in stocks_data[base]:
+            del stocks_data[base]['entry_date']
         if 0 < abs(stocks_data[base]['totalprice']) < 0.0001:
             logging.debug("   Rounding error when processing %s, totalprice: %s", base, stocks_data[base]['totalprice'])
             stocks_data[base]['totalprice'] = 0
@@ -1019,10 +1063,12 @@ def print_monthly_tracker(journal):
         # Largest gain and loss percentage
         largest_gain = max((entry['profit_loss_percentage'] for entry in month_entries if entry['win']), default=0.0)
         largest_loss = min((entry['profit_loss_percentage'] for entry in month_entries if not entry['win']), default=0.0)
-        # TODO avg days gain/loss
+        # Calculate average number of days a gain or loss position was held
+        average_days_gain = sum(entry['duration'] for entry in month_entries if entry['win']) / total_wins if total_wins > 0 else 0.0
+        average_days_loss = sum(entry['duration'] for entry in month_entries if not entry['win']) / total_losses if total_losses > 0 else 0.0
 
         # Print the monthly statistics
-        logging.info(f"{month:<10} {average_gain:>10.2f} {average_loss:>10.2f} {win_rate:>10.2f} {total_trades:>10} {largest_gain:>10.2f} {largest_loss:>10.2f} {'N/A':>10} {'N/A':>10}")
+        logging.info(f"{month:<10} {average_gain:>10.2f} {average_loss:>10.2f} {win_rate:>10.2f} {total_trades:>10} {largest_gain:>10.2f} {largest_loss:>10.2f} {average_days_gain:>10.2f} {average_days_loss:>10.2f}")
 
     logging.info("-" * 97)
     logging.info("")
@@ -1053,6 +1099,17 @@ def print_trading_summary(journal):
     logging.info("-" * 97)
     logging.info("")
 
+def calculate_duration(date, entry_date):
+    """Calculate the duration in days between two dates.
+
+    Args:
+        date: The date of the transaction
+        entry_date: The entry date of the position
+    """
+    date_obj = datetime.strptime(date.split(';')[0], '%Y%m%d')
+    entry_date_obj = datetime.strptime(entry_date.split(';')[0], '%Y%m%d')
+    return (date_obj - entry_date_obj).days
+
 def print_win_rate_statistics(statistics_data, year):
     """Print the win rate statistics to the console.
 
@@ -1062,7 +1119,7 @@ def print_win_rate_statistics(statistics_data, year):
     journal = []
     positions = {}
 
-    for (date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage) in statistics_data:
+    for (date, symbol, description, initial_quantity, delta, profit_loss, profit_loss_percentage, entry_date) in statistics_data:
         # Skip BTC transactions
         if symbol == 'BTC':
             continue
@@ -1075,21 +1132,25 @@ def print_win_rate_statistics(statistics_data, year):
 
         if symbol not in positions:
             if (initial_quantity + delta) == 0 and profit_loss < 0:
+                duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': profit_loss,
                     'profit_loss_percentage': profit_loss_percentage,
+                    'duration': duration_days,
                     'win': False
                 })
             elif (initial_quantity + delta == 0) and profit_loss >= 0:
+                duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': profit_loss,
                     'profit_loss_percentage': profit_loss_percentage,
+                    'duration': duration_days,
                     'win': True
                 })
             elif (initial_quantity + delta) > 0:
@@ -1100,23 +1161,27 @@ def print_win_rate_statistics(statistics_data, year):
         else:
             if (initial_quantity + delta) == 0 and (positions[symbol]['profit_loss'] + profit_loss) < 0:
                 positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
+                duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
                     'profit_loss_percentage': calculate_profit_loss_percentage(positions[symbol]['profit_loss_percentage']),
+                    'duration': duration_days,
                     'win': False
                 })
                 del positions[symbol]
             elif (initial_quantity + delta == 0) and  (positions[symbol]['profit_loss'] + profit_loss) >= 0:
                 positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
+                duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
                     'profit_loss_percentage': calculate_profit_loss_percentage(positions[symbol]['profit_loss_percentage']),
+                    'duration': duration_days,
                     'win': True
                 })
                 del positions[symbol]
@@ -1127,7 +1192,7 @@ def print_win_rate_statistics(statistics_data, year):
     # Print the journal
     logging.info("Win Rate Journal:")
     logging.info("=" * 97)
-    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Win':>5}")
+    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Day(s)':>8} {'Win':>5}")
     logging.info("-" * 97)
     for entry in journal:
         date = entry['date']
@@ -1135,15 +1200,16 @@ def print_win_rate_statistics(statistics_data, year):
         description = entry['description']
         profit_loss = entry['profit_loss']
         profit_loss_percentage = entry['profit_loss_percentage']
+        duration = entry['duration']
         win = 'Yes' if entry['win'] else 'No'
         if profit_loss < 0:
             profit_loss_str = f"({abs(profit_loss):.2f})"
             profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
-            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {win:>5}")
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
         else:
             profit_loss_str = f"{profit_loss:.2f}"
             profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
-            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {win:>5}")
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
     logging.info("-" * 97)
     # Win rate calculation
     total_trades = len(journal)

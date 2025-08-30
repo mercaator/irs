@@ -1043,9 +1043,9 @@ def print_monthly_tracker(journal):
         journal: List of journal entries
     """
     logging.info("Monthly Tracker:")
-    logging.info("=" * 97)
+    logging.info("=" * 98)
     logging.info(f"{'YYYYMM':<10} {'Avg Gain':>10} {'Avg Loss':>10} {'Win %':>10} {'Trades #':>10} {'LG Gain':>10} {'LG Loss':>10} {'Avg Days G':>10} {'Avg Days L':>10}")
-    logging.info("-" * 97)
+    logging.info("-" * 98)
 
     # Get a list of months in the journal
     months = sorted(set(entry['date'][:6] for entry in journal))  # YYYY-MM format
@@ -1070,7 +1070,7 @@ def print_monthly_tracker(journal):
         # Print the monthly statistics
         logging.info(f"{month:<10} {average_gain:>10.2f} {average_loss:>10.2f} {win_rate:>10.2f} {total_trades:>10} {largest_gain:>10.2f} {largest_loss:>10.2f} {average_days_gain:>10.2f} {average_days_loss:>10.2f}")
 
-    logging.info("-" * 97)
+    logging.info("-" * 98)
     logging.info("")
 
 def print_trading_summary(journal):
@@ -1080,9 +1080,9 @@ def print_trading_summary(journal):
         journal: List of journal entries
     """
     logging.info("Trading Summary:")
-    logging.info("=" * 97)
+    logging.info("=" * 98)
     logging.info(f"{'Metric':<30} {'Value':>15}")
-    logging.info("-" * 97)
+    logging.info("-" * 98)
     total_trades = len(journal)
     total_wins = sum(1 for entry in journal if entry['win'])
     total_losses = total_trades - total_wins
@@ -1096,7 +1096,7 @@ def print_trading_summary(journal):
     logging.info(f"{'Average Loss':<30} {average_loss:>15.2f}")
     logging.info(f"{'Win/Loss Ratio':<30} {win_loss_ratio:>15.2f}")
     logging.info(f"{'Adj. Win/Loss Ratio':<30} {adjusted_win_loss_ratio:>15.2f}")
-    logging.info("-" * 97)
+    logging.info("-" * 98)
     logging.info("")
 
 def calculate_duration(date, entry_date):
@@ -1191,9 +1191,9 @@ def print_win_rate_statistics(statistics_data, year):
 
     # Print the journal
     logging.info("Win Rate Journal:")
-    logging.info("=" * 97)
+    logging.info("=" * 115)
     logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Day(s)':>8} {'Win':>5}")
-    logging.info("-" * 97)
+    logging.info("-" * 115)
     for entry in journal:
         date = entry['date']
         symbol = entry['symbol']
@@ -1210,7 +1210,7 @@ def print_win_rate_statistics(statistics_data, year):
             profit_loss_str = f"{profit_loss:.2f}"
             profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
             logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
-    logging.info("-" * 97)
+    logging.info("-" * 115)
     # Win rate calculation
     total_trades = len(journal)
     total_wins = sum(1 for entry in journal if entry['win'])
@@ -1222,7 +1222,7 @@ def print_win_rate_statistics(statistics_data, year):
 
     logging.info(f"Total Trades: {total_trades}, Total Wins: {total_wins}, Win Rate: {win_rate:.2f}%")
     logging.info(f"Average Gain: {average_gain:.2f}%, Average Loss: {average_loss:.2f}%")
-    logging.info("=" * 97)
+    logging.info("=" * 115)
     logging.info("")
     print_monthly_tracker(journal)
     print_trading_summary(journal)

@@ -41,7 +41,7 @@ List of generated files:
     - INFO.SRU         - tax payer information
     - BLANKETTER.SRU   - transaction data for each stock sold during the tax year
     - output_portfolio_<year>.json - portfolio data at the end of the tax year
-    - output_statistics_<year>.csv - profit/loss statistics for post-processing e.g. pandas
+    - trading_statistics_<year>.csv - profit/loss statistics for post-processing e.g. pandas
 
 Supported file format:
 

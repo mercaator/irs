@@ -126,6 +126,9 @@ def process_currency_buy(currency, amount, currency_rate, stocks_data, date):
     # Thus, we only handle the cases where the quantity is positive and stays positive or zero, or where the
     # quantity is negative and stays negative or zero.
     elif stocks_data[currency]['quantity'] >= 0:
+        # Update entry_date if a new position is opened in a currency that was already held previously
+        if stocks_data[currency]['quantity'] == 0:
+            stocks_data[currency]['entry_date'] = date
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * currency_rate
         stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
@@ -163,6 +166,9 @@ def process_currency_sell(currency, amount, currency_rate, stocks_data, date):
     else:
         logging.debug("      added margin loan %s %s, %s/SEK = %s, %s", -amount, currency, currency, currency_rate, date)
         # Update averge price on margin loan
+        # Update entry_date if a new position is opened in a currency that was already held previously
+        if stocks_data[currency]['quantity'] == 0:
+            stocks_data[currency]['entry_date'] = date
         stocks_data[currency]['quantity'] += -amount
         stocks_data[currency]['totalprice'] += -amount * currency_rate
         stocks_data[currency]['avgprice'] = stocks_data[currency]['totalprice'] / stocks_data[currency]['quantity']
@@ -241,6 +247,9 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
         elif stocks_data[base]['quantity'] >= 0:
             # Normal case, long position
+            # Update entry_date if a new position is opened in stock that was already held previously
+            if stocks_data[base]['quantity'] == 0:
+                stocks_data[base]['entry_date'] = date
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * trade_price + commission
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
@@ -281,6 +290,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             else:
                 stocks_data[base]['totalprice'] = surplus * unit_price
                 stocks_data[base]['avgprice'] = unit_price
+                stocks_data[base]['entry_date'] = date # TODO: test if this is correct
         else:
             # Cover part of margin loan with new buy entry
             logging.debug("      buying (covering partial) %s %s, total margin loan %s ", quantity, base, stocks_data[base]['quantity'])
@@ -397,6 +407,9 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
             usd_statistics_first_buy(stocks_data, base, (quantity * trade_price + commission))
         elif stocks_data[base]['quantity'] >= 0:
+            # Update entry_date if a new position is opened in stock that was already held previously
+            if stocks_data[base]['quantity'] == 0:
+                stocks_data[base]['entry_date'] = date
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += (quantity * trade_price + commission) * currency_rate
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
@@ -437,6 +450,7 @@ def process_buy_entry(symbol, description, quantity, trade_price, commission, cu
             else:
                 stocks_data[base]['totalprice'] = surplus * unit_price
                 stocks_data[base]['avgprice'] = unit_price
+                stocks_data[base]['entry_date'] = date # TODO: test if this is correct
                 usd_statistics_update_total_avg(stocks_data, base, surplus * (trade_price + commission_per_share), trade_price + commission_per_share)
         else:
             # Cover part of margin loan with new buy entry
@@ -570,12 +584,15 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
             stocks_data[base]['quantity'] = credit
             stocks_data[base]['totalprice'] = credit * unit_price
             stocks_data[base]['avgprice'] = unit_price
+            stocks_data[base]['entry_date'] = date # TODO: test if this is correct
         else:
             # Add to margin loan, selling more shares than available
             logging.debug("      (margin loan add) new margin loan %s %s, added to existing loan %s ", -quantity, base, stocks_data[base]['quantity'])
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += quantity * trade_price + commission
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+            if not 'entry_date' in stocks_data[base]:
+                stocks_data[base]['entry_date'] = date # TODO: test if this is correct
 
     else:
         # UC-7. Sell stock in foreign currency e.g. sell AAOI for USD
@@ -702,6 +719,7 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
             stocks_data[base]['quantity'] = credit
             stocks_data[base]['totalprice'] = credit * unit_price * currency_rate
             stocks_data[base]['avgprice'] = unit_price * currency_rate
+            stocks_data[base]['entry_date'] = date # TODO: test if this is correct
             usd_statistics_update_total_avg(stocks_data, base, credit * unit_price, unit_price)
         else:
             # Add to margin loan, selling more shares than available
@@ -709,6 +727,8 @@ def process_sell_entry(symbol, description, quantity, trade_price, commission, c
             stocks_data[base]['quantity'] += quantity
             stocks_data[base]['totalprice'] += (quantity * trade_price + commission) * currency_rate
             stocks_data[base]['avgprice'] = stocks_data[base]['totalprice'] / stocks_data[base]['quantity']
+            if not 'entry_date' in stocks_data[base]:
+                stocks_data[base]['entry_date'] = date # TODO: test if this is correct
             usd_statistics_short_sell(stocks_data, base, (quantity * trade_price + commission))
 
     # Handle fractional "shares" (satoshis) of BTC as most probably fees cause final quantity to be more than 0.0001

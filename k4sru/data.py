@@ -1062,10 +1062,11 @@ def print_monthly_tracker(journal):
     Args:
         journal: List of journal entries
     """
+    line_length = 120
     logging.info("Monthly Tracker:")
-    logging.info("=" * 98)
-    logging.info(f"{'YYYYMM':<10} {'Avg Gain':>10} {'Avg Loss':>10} {'Win %':>10} {'Trades #':>10} {'LG Gain':>10} {'LG Loss':>10} {'Avg Days G':>10} {'Avg Days L':>10}")
-    logging.info("-" * 98)
+    logging.info("=" * line_length)
+    logging.info(f"{'YYYYMM':<10} {'Avg Gain':>10} {'Avg Loss':>10} {'Win %':>10} {'Trades #':>10} {'LG Gain':>10} {'LG Loss':>10} {'Avg Days G':>10} {'Avg Days L':>10} {'EV':>10} {'Kelly f':>10}")
+    logging.info("-" * line_length)
 
     # Get a list of months in the journal
     months = sorted(set(entry['date'][:6] for entry in journal))  # YYYY-MM format
@@ -1086,11 +1087,16 @@ def print_monthly_tracker(journal):
         # Calculate average number of days a gain or loss position was held
         average_days_gain = sum(entry['duration'] for entry in month_entries if entry['win']) / total_wins if total_wins > 0 else 0.0
         average_days_loss = sum(entry['duration'] for entry in month_entries if not entry['win']) / total_losses if total_losses > 0 else 0.0
+        # Calculate expected value (EV) and Kelly optimal f
+        ev = (win_rate / 100) * average_gain + (1 - (win_rate / 100)) * average_loss if total_trades > 0 else 0.0
+        win_loss_ratio = (average_gain / abs(average_loss)) if average_loss != 0 else float('inf')
+        kelly_optimal_f = ((win_rate / 100) - ((1 - (win_rate / 100)) / win_loss_ratio)) * 100 if win_loss_ratio != 0 else 0.0
+        kelly_optimal_f = max(0.0, min(kelly_optimal_f, 100.0))  # Cap Kelly f between 0% and 100%
 
         # Print the monthly statistics
-        logging.info(f"{month:<10} {average_gain:>10.2f} {average_loss:>10.2f} {win_rate:>10.2f} {total_trades:>10} {largest_gain:>10.2f} {largest_loss:>10.2f} {average_days_gain:>10.2f} {average_days_loss:>10.2f}")
+        logging.info(f"{month:<10} {average_gain:>10.2f} {average_loss:>10.2f} {win_rate:>10.2f} {total_trades:>10} {largest_gain:>10.2f} {largest_loss:>10.2f} {average_days_gain:>10.2f} {average_days_loss:>10.2f} {ev:>10.2f} {kelly_optimal_f:>10.2f}")
 
-    logging.info("-" * 98)
+    logging.info("-" * line_length)
     logging.info("")
 
 def print_trading_summary(journal):
@@ -1111,11 +1117,16 @@ def print_trading_summary(journal):
     average_loss = sum(entry['profit_loss_percentage'] for entry in journal if not entry['win']) / total_losses if total_losses > 0 else 0.0
     win_loss_ratio = (average_gain / abs(average_loss)) if average_loss != 0 else float('inf')
     adjusted_win_loss_ratio = average_gain * (win_rate / 100) / (abs(average_loss) * (1 - (win_rate / 100))) if average_loss != 0 and win_rate < 100 else float('inf')
+    ev = (win_rate / 100) * average_gain + (1 - (win_rate / 100)) * average_loss if total_trades > 0 else 0.0
+    kelly_optimal_f = ((win_rate / 100) - ((1 - (win_rate / 100)) / win_loss_ratio)) * 100 if win_loss_ratio != 0 else 0.0
+    kelly_optimal_f = max(0.0, min(kelly_optimal_f, 100.0))  # Cap Kelly f between 0% and 100%
     logging.info(f"{'Winning Percentage':<30} {win_rate:>15.2f}")
     logging.info(f"{'Average Gain':<30} {average_gain:>15.2f}")
     logging.info(f"{'Average Loss':<30} {average_loss:>15.2f}")
     logging.info(f"{'Win/Loss Ratio':<30} {win_loss_ratio:>15.2f}")
     logging.info(f"{'Adj. Win/Loss Ratio':<30} {adjusted_win_loss_ratio:>15.2f}")
+    logging.info(f"{'Expected Value (EV)':<30} {ev:>15.2f}")
+    logging.info(f"{'Kelly Optimal f':<30} {kelly_optimal_f:>15.2f}")
     logging.info("-" * 98)
     logging.info("")
 

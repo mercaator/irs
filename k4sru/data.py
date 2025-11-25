@@ -1057,6 +1057,44 @@ def calculate_profit_loss_percentage(profit_loss_percentage_list):
     total_profit_loss_percentage = sum(delta * profit_loss_percentage for delta, profit_loss_percentage in profit_loss_percentage_list)
     return total_profit_loss_percentage / total_delta if total_delta != 0 else 0.0
 
+def print_win_rate_journal(title, journal):
+    # Print the journal
+    logging.info(title)
+    logging.info("=" * 115)
+    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Day(s)':>8} {'Win':>5}")
+    logging.info("-" * 115)
+    for entry in journal:
+        date = entry['date']
+        entry_date = entry['entry_date']
+        symbol = entry['symbol']
+        description = entry['description']
+        profit_loss = entry['profit_loss']
+        profit_loss_percentage = entry['profit_loss_percentage']
+        duration = entry['duration']
+        win = 'Yes' if entry['win'] else 'No'
+        if profit_loss < 0:
+            profit_loss_str = f"({abs(profit_loss):.2f})"
+            profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
+        else:
+            profit_loss_str = f"{profit_loss:.2f}"
+            profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
+            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
+    logging.info("-" * 115)
+    # Win rate calculation
+    total_trades = len(journal)
+    total_wins = sum(1 for entry in journal if entry['win'])
+    total_losses = total_trades - total_wins
+    win_rate = (total_wins / total_trades * 100)
+    # Calculate average gain and the average loss over all trades
+    average_gain = sum(entry['profit_loss_percentage'] for entry in journal if entry['win']) / total_wins if total_wins > 0 else 0
+    average_loss = sum(entry['profit_loss_percentage'] for entry in journal if not entry['win']) / total_losses if total_losses > 0 else 0
+
+    logging.info(f"Total Trades: {total_trades}, Total Wins: {total_wins}, Win Rate: {win_rate:.2f}%")
+    logging.info(f"Average Gain: {average_gain:.2f}%, Average Loss: {average_loss:.2f}%")
+    logging.info("=" * 115)
+    logging.info("")
+
 def print_monthly_tracker(title, journal):
     """Print the monthly tracker to the console.
 
@@ -1225,43 +1263,7 @@ def print_win_rate_statistics(statistics_data, year):
                 positions[symbol]['profit_loss'] += profit_loss
                 positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
 
-    # Print the journal
-    logging.info("Win Rate Journal")
-    logging.info("=" * 134)
-    logging.info(f"{'Date (Close)':<18} {'Date (Entry)':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Day(s)':>8} {'Win':>5}")
-    logging.info("-" * 134)
-    for entry in journal:
-        date = entry['date']
-        entry_date = entry['entry_date']
-        symbol = entry['symbol']
-        description = entry['description']
-        profit_loss = entry['profit_loss']
-        profit_loss_percentage = entry['profit_loss_percentage']
-        duration = entry['duration']
-        win = 'Yes' if entry['win'] else 'No'
-        if profit_loss < 0:
-            profit_loss_str = f"({abs(profit_loss):.2f})"
-            profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
-            logging.info(f"{date:<18} {entry_date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
-        else:
-            profit_loss_str = f"{profit_loss:.2f}"
-            profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
-            logging.info(f"{date:<18} {entry_date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
-    logging.info("-" * 134)
-    # Win rate calculation
-    total_trades = len(journal)
-    total_wins = sum(1 for entry in journal if entry['win'])
-    total_losses = total_trades - total_wins
-    win_rate = (total_wins / total_trades * 100)
-    # Calculate average gain and the average loss over all trades
-    average_gain = sum(entry['profit_loss_percentage'] for entry in journal if entry['win']) / total_wins if total_wins > 0 else 0
-    average_loss = sum(entry['profit_loss_percentage'] for entry in journal if not entry['win']) / total_losses if total_losses > 0 else 0
-
-    logging.info(f"Total Trades: {total_trades}, Total Wins: {total_wins}, Win Rate: {win_rate:.2f}%")
-    logging.info(f"Average Gain: {average_gain:.2f}%, Average Loss: {average_loss:.2f}%")
-    logging.info("=" * 134)
-    logging.info("")
-
+    print_win_rate_journal(f"Win Rate Journal (by close date)", journal)
     print_monthly_tracker("Monthly Tracker (by close date)", journal)
     print_trading_summary("Trading Summary (by close date)",journal)
 
@@ -1275,6 +1277,10 @@ def print_win_rate_statistics(statistics_data, year):
             new_entry = entry.copy()
             new_entry['date'] = entry['entry_date']
             journal_entry_date.append(new_entry)
+    # Order by entry date
+    journal_entry_date = sorted(journal_entry_date, key=lambda x: x['date'])
+
+    print_win_rate_journal(f"Win Rate Journal (by entry date)", journal_entry_date)
     print_monthly_tracker("Monthly Tracker (by entry date)", journal_entry_date)
     print_trading_summary("Trading Summary (by entry date)", journal_entry_date)
 

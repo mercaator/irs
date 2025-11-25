@@ -1011,7 +1011,7 @@ def print_k4_statistics(k4_data):
     Args:
         statistics_data: List of statistics data
     """
-    logging.info("K4 statistics data:")
+    logging.info("K4 statistics data")
     # Print header
     logging.info("=" * 87)
     logging.info(f"{'Symbol':<25} {'Description':<40} {'Profit/Loss (SEK)':>20}")
@@ -1041,6 +1041,7 @@ def print_k4_statistics(k4_data):
     # Tax to be paid
     logging.info(f"{'Tax':<65} {capital_tax:>20}")
     logging.info("=" * 87)
+    logging.info("")
 
 def calculate_profit_loss_percentage(profit_loss_percentage_list):
     """Calculate the average profit/loss percentage from a list of tuples.
@@ -1056,14 +1057,14 @@ def calculate_profit_loss_percentage(profit_loss_percentage_list):
     total_profit_loss_percentage = sum(delta * profit_loss_percentage for delta, profit_loss_percentage in profit_loss_percentage_list)
     return total_profit_loss_percentage / total_delta if total_delta != 0 else 0.0
 
-def print_monthly_tracker(journal):
+def print_monthly_tracker(title, journal):
     """Print the monthly tracker to the console.
 
     Args:
         journal: List of journal entries
     """
     line_length = 120
-    logging.info("Monthly Tracker:")
+    logging.info(title)
     logging.info("=" * line_length)
     logging.info(f"{'YYYYMM':<10} {'Avg Gain':>10} {'Avg Loss':>10} {'Win %':>10} {'Trades #':>10} {'LG Gain':>10} {'LG Loss':>10} {'Avg Days G':>10} {'Avg Days L':>10} {'EV':>10} {'Kelly f':>10}")
     logging.info("-" * line_length)
@@ -1099,13 +1100,13 @@ def print_monthly_tracker(journal):
     logging.info("-" * line_length)
     logging.info("")
 
-def print_trading_summary(journal):
+def print_trading_summary(title, journal):
     """Print the trading summary to the console.
 
     Args:
         journal: List of journal entries
     """
-    logging.info("Trading Summary:")
+    logging.info(title)
     logging.info("=" * 98)
     logging.info(f"{'Metric':<30} {'Value':>15}")
     logging.info("-" * 98)
@@ -1166,6 +1167,7 @@ def print_win_rate_statistics(statistics_data, year):
                 duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
+                    'entry_date': entry_date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': profit_loss,
@@ -1177,6 +1179,7 @@ def print_win_rate_statistics(statistics_data, year):
                 duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
+                    'entry_date': entry_date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': profit_loss,
@@ -1195,6 +1198,7 @@ def print_win_rate_statistics(statistics_data, year):
                 duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
+                    'entry_date': entry_date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
@@ -1208,6 +1212,7 @@ def print_win_rate_statistics(statistics_data, year):
                 duration_days = calculate_duration(date, entry_date)
                 journal.append({
                     'date': date,
+                    'entry_date': entry_date,
                     'symbol': symbol,
                     'description': description,
                     'profit_loss': (positions[symbol]['profit_loss'] + profit_loss),
@@ -1221,12 +1226,13 @@ def print_win_rate_statistics(statistics_data, year):
                 positions[symbol]['profit_loss_percentage'].append((delta, profit_loss_percentage))
 
     # Print the journal
-    logging.info("Win Rate Journal:")
-    logging.info("=" * 115)
-    logging.info(f"{'Date':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Day(s)':>8} {'Win':>5}")
-    logging.info("-" * 115)
+    logging.info("Win Rate Journal")
+    logging.info("=" * 134)
+    logging.info(f"{'Date (Close)':<18} {'Date (Entry)':<18} {'Symbol':<10} {'Description':<40} {'Profit/Loss (SEK)':>20} {'P/L (%)':>8} {'Day(s)':>8} {'Win':>5}")
+    logging.info("-" * 134)
     for entry in journal:
         date = entry['date']
+        entry_date = entry['entry_date']
         symbol = entry['symbol']
         description = entry['description']
         profit_loss = entry['profit_loss']
@@ -1236,12 +1242,12 @@ def print_win_rate_statistics(statistics_data, year):
         if profit_loss < 0:
             profit_loss_str = f"({abs(profit_loss):.2f})"
             profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
-            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
+            logging.info(f"{date:<18} {entry_date:<18} {symbol:<10} {description:<40} {profit_loss_str:>20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
         else:
             profit_loss_str = f"{profit_loss:.2f}"
             profit_loss_percentage_str = f"{profit_loss_percentage:.2f}%"
-            logging.info(f"{date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
-    logging.info("-" * 115)
+            logging.info(f"{date:<18} {entry_date:<18} {symbol:<10} {description:<40} {profit_loss_str:<20} {profit_loss_percentage_str:>8} {duration:>8} {win:>5}")
+    logging.info("-" * 134)
     # Win rate calculation
     total_trades = len(journal)
     total_wins = sum(1 for entry in journal if entry['win'])
@@ -1253,10 +1259,25 @@ def print_win_rate_statistics(statistics_data, year):
 
     logging.info(f"Total Trades: {total_trades}, Total Wins: {total_wins}, Win Rate: {win_rate:.2f}%")
     logging.info(f"Average Gain: {average_gain:.2f}%, Average Loss: {average_loss:.2f}%")
-    logging.info("=" * 115)
+    logging.info("=" * 134)
     logging.info("")
-    print_monthly_tracker(journal)
-    print_trading_summary(journal)
+
+    print_monthly_tracker("Monthly Tracker (by close date)", journal)
+    print_trading_summary("Trading Summary (by close date)",journal)
+
+    # Create journal where date entry is the entry date
+    journal_entry_date = []
+    for entry in journal:
+        # Extract year from entry_date (format: YYYYMMDD;HHMMSS)
+        entry_year = entry['entry_date'][:4]
+        # Only include entries from the current year
+        if entry_year == str(year):
+            new_entry = entry.copy()
+            new_entry['date'] = entry['entry_date']
+            journal_entry_date.append(new_entry)
+    print_monthly_tracker("Monthly Tracker (by entry date)", journal_entry_date)
+    print_trading_summary("Trading Summary (by entry date)", journal_entry_date)
+
     save_statistics_data(year, journal)
 
 def print_statistics(statistics_data, k4_data, year):

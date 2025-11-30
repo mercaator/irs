@@ -1227,6 +1227,7 @@ def print_win_rate_statistics(statistics_data, year):
                 })
             elif (initial_quantity + delta) > 0:
                 positions[symbol] = {
+                    'entry_date': entry_date,
                     'profit_loss': profit_loss,
                     'profit_loss_percentage': [(delta, profit_loss_percentage)]
                 }
@@ -1277,6 +1278,22 @@ def print_win_rate_statistics(statistics_data, year):
             new_entry = entry.copy()
             new_entry['date'] = entry['entry_date']
             journal_entry_date.append(new_entry)
+
+    # TODO: Figure out how to handle open positions in win rate statistics
+    # Append open positions to journal_entry_date and book it as a wining trade with 0 profit/loss
+    #for symbol, pos in positions.items():
+    #    duration_days = calculate_duration(datetime.now().strftime('%Y%m%d'), pos['entry_date'])
+    #    journal_entry_date.append({
+    #        'date': pos['entry_date'],
+    #        'entry_date': pos['entry_date'],
+    #        'symbol': symbol,
+    #        'description': '',
+    #        'profit_loss': 0.0,
+    #        'profit_loss_percentage': 0.0,
+    #        'duration': duration_days,
+    #        'win': True
+    #    })
+
     # Order by entry date
     journal_entry_date = sorted(journal_entry_date, key=lambda x: x['date'])
 
@@ -1284,7 +1301,7 @@ def print_win_rate_statistics(statistics_data, year):
     print_monthly_tracker("Monthly Tracker (by entry date)", journal_entry_date)
     print_trading_summary("Trading Summary (by entry date)", journal_entry_date)
 
-    save_statistics_data(year, journal)
+    save_statistics_data(year, journal_entry_date)
 
 def print_statistics(statistics_data, k4_data, year):
     """Print the statistics data to the console.

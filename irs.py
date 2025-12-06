@@ -120,7 +120,7 @@ def main():
     console_handler.setLevel(logging_level)
 
     # Create a file handler
-    file_handler = logging.FileHandler('output/irs.log')
+    file_handler = logging.FileHandler('output/irs.log', mode='w')
     file_handler.setLevel(logging_level)
 
     # Create a formatter and set it for both handlers

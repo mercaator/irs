@@ -73,7 +73,7 @@ Supported file format:
                         help='optional secondary input CSV file with additional trade data (e.g., Bitstamp trades)')
     k4sru_parser.add_argument('--debug', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                        default='INFO', help='set logging level')
-    k4sru_parser.add_argument('--year', default=2025, help='tax year for which to generate the K4 SRU files')
+    k4sru_parser.add_argument('--year', default=2026, help='tax year for which to generate the K4 SRU files')
     k4sru_parser.add_argument('--longnames', action='store_true', default=False,
                        help='output long names in the generated K4 SRU file instead of the ticker symbols')
 

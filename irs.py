@@ -100,7 +100,7 @@ def handle_k4sru(args):
     transactions = process_transactions(filepath_ibkr, filepath_bitstamp, year, stocks_data, k4_data, currency_rates, statistics_data)
     # Save the processed data to a JSON file
     save_stocks_data(year, stocks_data)
-    generate_blanketter_sru(config, transactions, longnames)
+    generate_blanketter_sru(config, transactions, longnames, year)
     # Print statistics data
     print_statistics(statistics_data, k4_data, year)
 

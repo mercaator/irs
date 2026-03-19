@@ -239,13 +239,13 @@ def generate_info_sru(data):
 
     logging.info("INFO.SRU file generated successfully.")
 
-def generate_sru_header(config):
+def generate_sru_header(config, year):
     """Generate SRU header.
 
     Args:
         config: Dictionary containing configuration
     """
-    file_header = (f"#BLANKETT K4-2024P4\n"
+    file_header = (f"#BLANKETT K4-{year}P4\n"
                    f"#IDENTITET {config.get('orgnr', '')} {datetime.now().strftime('%Y%m%d %H%M%S')}\n"
                    f"#NAMN {config.get('namn', '')}\n"
                    )
@@ -410,7 +410,7 @@ def generate_k4_blocks(k4_combined_transactions, longnames):
 
     return blocks_a, blocks_c, blocks_d
 
-def assemble_blocks(config, blocks_a, blocks_c, blocks_d):
+def assemble_blocks(config, blocks_a, blocks_c, blocks_d, year):
     """Assemble blocks into a single SRU file.
 
     Args:
@@ -426,7 +426,7 @@ def assemble_blocks(config, blocks_a, blocks_c, blocks_d):
     logging.debug(f"Blocks D: {len(blocks_d)}")
     logging.debug(f"Blocks D: {blocks_d}")
     for i, block in enumerate(blocks_a, 1):
-        file_content += generate_sru_header(config)
+        file_content += generate_sru_header(config, year)
         file_content += block
         if len(blocks_c) > 0:
             file_content += blocks_c[0]
@@ -439,7 +439,7 @@ def assemble_blocks(config, blocks_a, blocks_c, blocks_d):
     # Improbable, but possible
     if len(blocks_c) > 0:
         for i, block in enumerate(blocks_c, 1):
-            file_content += generate_sru_header(config)
+            file_content += generate_sru_header(config, year)
             file_content += block
             if len(blocks_d) > 0:
                 file_content += blocks_d[0]
@@ -449,30 +449,34 @@ def assemble_blocks(config, blocks_a, blocks_c, blocks_d):
     return file_content
 
 
-def generate_body(config, k4_combined_transactions, longnames):
+def generate_body(config, k4_combined_transactions, longnames, year):
     """Process K4 transactions into SRU file format.
 
     Args:
         k4_combined_transactions: Dictionary of combined K4 transactions
+        longnames: Boolean indicating whether to use long names
+        year: The tax year for which to generate the report
 
     Returns:
         str: Formatted K4 data for SRU file
     """
     file_body = ""
     blocks_a, blocks_c, blocks_d = generate_k4_blocks(k4_combined_transactions, longnames)
-    file_body += assemble_blocks(config, blocks_a, blocks_c, blocks_d)
+    file_body += assemble_blocks(config, blocks_a, blocks_c, blocks_d, year)
     return file_body
 
-def generate_blanketter_sru(config, k4_combined_transactions, longnames):
+def generate_blanketter_sru(config, k4_combined_transactions, longnames, year):
     """Generate BLANKETTER.SRU file from K4 trading data.
 
     Args:
         config: Dictionary containing configuration
         k4_combined_transactions: Dictionary containing combined K4 transactions
+        longnames: Boolean indicating whether to use long names
+        year: The tax year for which to generate the report
     """
     # Initialize file_content first
     file_content = ""
-    file_body = generate_body(config, k4_combined_transactions, longnames)
+    file_body = generate_body(config, k4_combined_transactions, longnames, year)
     file_content += file_body
     file_content += "#FIL_SLUT\n"
 

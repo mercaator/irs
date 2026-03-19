@@ -56,8 +56,8 @@ class TestSRUFunctions(unittest.TestCase):
             'orgnr': '1234567890',
             'namn': 'Test Company'
         }
-        header = generate_sru_header(config)
-        self.assertIn("#BLANKETT K4-2024P4\n", header)
+        header = generate_sru_header(config, 2025)
+        self.assertIn("#BLANKETT K4-2025P4\n", header)
         self.assertIn("#IDENTITET 1234567890", header)
         self.assertIn("#NAMN Test Company\n", header)
 
@@ -108,7 +108,7 @@ class TestSRUFunctions(unittest.TestCase):
         blocks_a = ["#UPPGIFT 3100 10\n#UPPGIFT 3101 AAPL\n#UPPGIFT 3102 1000\n#UPPGIFT 3103 800\n#UPPGIFT 3104 200\n#UPPGIFT 3105 0\n"]
         blocks_c = ["#UPPGIFT 3310 100\n#UPPGIFT 3311 USD\n#UPPGIFT 3312 1000\n#UPPGIFT 3313 900\n#UPPGIFT 3314 100\n#UPPGIFT 3315 0\n"]
         blocks_d = []
-        file_content = assemble_blocks(config, blocks_a, blocks_c, blocks_d)
+        file_content = assemble_blocks(config, blocks_a, blocks_c, blocks_d, 2025)
         self.assertIn("#UPPGIFT 3100 10\n", file_content)
         self.assertIn("#UPPGIFT 3310 100\n", file_content)
         self.assertIn("#BLANKETTSLUT\n", file_content)

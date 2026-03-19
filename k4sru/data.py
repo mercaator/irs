@@ -17,6 +17,7 @@ import sys
 import csv
 import json
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from pprint import pformat
 from .sru import CURRENCY_CODES, OUTPUT_DIR
 
@@ -921,16 +922,65 @@ def process_currency_rates(rates, currency_rates, year):
 
     logging.debug("==> Currency rates:\n%s", pformat(currency_rates, indent=4))
 
-def post_process_trading_data(combined_trades):
+def round_to_decimal12_8(value: float) -> Decimal:
+    """
+    Rounds a float to Decimal12_8 format.
+    - Total digits: 12 (integer part) + 8 (decimal part)
+    - Range: 0 to 999999999999.99999999
+
+    Args:
+        value: The float value to round.
+
+    Returns:
+        A Decimal rounded to 8 decimal places within the valid range.
+
+    Raises:
+        ValueError: If the value is out of the valid range.
+    """
+    MAX_VALUE = Decimal("999999999999.99999999")
+    MIN_VALUE = Decimal("0")
+    QUANTIZE_FORMAT = Decimal("0.00000001")  # 8 decimal places
+
+    try:
+        decimal_value = Decimal(str(value))
+    except InvalidOperation:
+        raise ValueError(f"Cannot convert {value} to Decimal.")
+
+    rounded = decimal_value.quantize(QUANTIZE_FORMAT, rounding=ROUND_HALF_UP)
+
+    if rounded < MIN_VALUE or rounded > MAX_VALUE:
+        raise ValueError(
+            f"Value {rounded} is out of range for Decimal12_8 "
+            f"(0 to 999999999999.99999999)."
+        )
+
+    return f"{rounded.normalize():f}"
+
+def get_k4_d_antal(antal, beteckning, year):
+    """Get the quantity (antal) for K4 tax reporting. Ensuring it is rounded to an integer value unless the tax year is 2025 or later, and
+    beteckning is "BTC", in which case it is rounded to Decimal12_8 format.
+
+    Args:
+        antal: The original quantity value
+        beteckning: The symbol of the stock or currency
+        year: The tax year for which to generate the report
+    """
+    if int(year) >= 2025 and beteckning == "BTC":
+        return round_to_decimal12_8(antal)
+    else:
+        return round(antal)
+
+def post_process_trading_data(combined_trades, year):
     """Post-process the trading data for K4 tax reporting as the system handles only integer values.
 
     Args:
         combined_trades: List of combined trading data
+        year: The tax year for which to generate the report
     """
     output = []
     for trade in combined_trades:
         post_processed_data = {}
-        post_processed_data['antal'] = round(float(trade['antal']))
+        post_processed_data['antal'] = get_k4_d_antal(trade['antal'], trade['beteckning'], year)
         post_processed_data['beteckning'] = trade['beteckning']
         post_processed_data['beskrivning'] = trade['beskrivning']
         post_processed_data['forsaljningspris'] = round(float(trade['forsaljningspris']))
@@ -1347,4 +1397,4 @@ def process_transactions(filename_ibkr, filename_bitstamp, year, stocks_data, k4
 
     processed_data = process_trading_data(sorted_trades, stocks_data, k4_data, currency_rates, statistics_data)
 
-    return post_process_trading_data(processed_data)
+    return post_process_trading_data(processed_data, year)
